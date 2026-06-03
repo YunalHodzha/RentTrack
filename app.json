@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "renttrack-tmp",
-    "slug": "renttrack-tmp",
+    "name": "RentTrack",
+    "slug": "renttrack",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "renttracktmp",
+    "scheme": "renttrack",
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon"
