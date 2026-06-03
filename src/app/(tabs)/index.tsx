@@ -1,22 +1,16 @@
 import { useCallback } from 'react';
-import { View, Text, ScrollView, useColorScheme } from 'react-native';
+import { View, Text, ScrollView } from 'react-native';
 import { useFocusEffect } from '@react-navigation/core';
+import { format } from 'date-fns';
 import { db } from '@/db/client';
 import { properties, leases, payments } from '@/db/schema';
 import { useAppStore } from '@/store';
-import { eq } from 'drizzle-orm';
-import { format } from 'date-fns';
+import { Header, Card, ProgressBar, EmptyState, useTheme, spacing, radius, shadow } from '@/components/ui';
+import { formatMoney, formatPeriod, type Currency } from '@/lib/domain';
 
 export default function DashboardScreen() {
-  const scheme = useColorScheme();
-  const isDark = scheme === 'dark';
-  const { properties: props, leases: leasList, payments: payList, setProperties, setLeases, setPayments } = useAppStore();
-
-  const bg = isDark ? '#111827' : '#F9FAFB';
-  const card = isDark ? '#1F2937' : '#FFFFFF';
-  const text = isDark ? '#F9FAFB' : '#111827';
-  const sub = isDark ? '#9CA3AF' : '#6B7280';
-  const border = isDark ? '#374151' : '#E5E7EB';
+  const t = useTheme();
+  const { properties: props, leases: leaseList, payments: payList, setProperties, setLeases, setPayments } = useAppStore();
 
   async function loadAll() {
     const [p, l, pay] = await Promise.all([
@@ -32,73 +26,144 @@ export default function DashboardScreen() {
   useFocusEffect(useCallback(() => { loadAll(); }, []));
 
   const currentPeriod = format(new Date(), 'yyyy-MM');
-  const activeLeases = leasList.filter((l) => l.status === 'active');
+  const activeLeases = leaseList.filter((l) => l.status === 'active');
   const rentedCount = props.filter((p) => p.status === 'rented').length;
   const occupancyRate = props.length > 0 ? Math.round((rentedCount / props.length) * 100) : 0;
 
-  const monthlyIncome = activeLeases.reduce((sum, l) => sum + l.rentAmount, 0);
+  // Currency is tracked per lease, so all aggregates are kept per-currency.
+  const currencyOf = (leaseId: number): Currency =>
+    (leaseList.find((l) => l.id === leaseId)?.currency as Currency) ?? 'EUR';
 
-  const currentPayments = payList.filter((p) => p.period === currentPeriod);
-  const collected = currentPayments.filter((p) => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0);
-  const owed = monthlyIncome - collected;
+  const currentPaid = payList.filter((p) => p.period === currentPeriod && p.status === 'paid');
+
+  const incomeBy: Partial<Record<Currency, number>> = {};
+  for (const l of activeLeases) incomeBy[l.currency] = (incomeBy[l.currency] ?? 0) + l.rentAmount;
+
+  const collectedBy: Partial<Record<Currency, number>> = {};
+  for (const p of currentPaid) {
+    const c = currencyOf(p.leaseId);
+    collectedBy[c] = (collectedBy[c] ?? 0) + p.amount;
+  }
+
+  const owedBy: Partial<Record<Currency, number>> = {};
+  for (const c of Object.keys(incomeBy) as Currency[]) {
+    owedBy[c] = Math.max(0, (incomeBy[c] ?? 0) - (collectedBy[c] ?? 0));
+  }
+
+  const fmtMap = (m: Partial<Record<Currency, number>>) => {
+    const keys = Object.keys(m) as Currency[];
+    return keys.length ? keys.map((c) => formatMoney(m[c]!, c)).join('  ·  ') : formatMoney(0, 'EUR');
+  };
+  const totalOwed = (Object.values(owedBy) as number[]).reduce((s, n) => s + n, 0);
 
   const overdueLeases = activeLeases.filter((lease) => {
-    const today = new Date();
-    const dayOfMonth = today.getDate();
-    const hasPaid = currentPayments.some((p) => p.leaseId === lease.id && p.status === 'paid');
+    const dayOfMonth = new Date().getDate();
+    const hasPaid = currentPaid.some((p) => p.leaseId === lease.id);
     return dayOfMonth > lease.paymentDay && !hasPaid;
   });
 
+  const monthLabel = formatPeriod(currentPeriod);
+  const monthCapitalized = monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1);
+
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: bg }} contentContainerStyle={{ paddingBottom: 40 }}>
-      <View style={{ paddingTop: 60, paddingHorizontal: 20, paddingBottom: 20, backgroundColor: card, borderBottomWidth: 1, borderBottomColor: border }}>
-        <Text style={{ fontSize: 14, color: sub }}>{format(new Date(), 'MMMM yyyy')}</Text>
-        <Text style={{ fontSize: 28, fontWeight: '700', color: text, marginTop: 2 }}>Табло</Text>
-      </View>
+    <ScrollView style={{ flex: 1, backgroundColor: t.bg }} contentContainerStyle={{ paddingBottom: 40 }}>
+      <Header title="Табло" subtitle={monthCapitalized} />
 
-      <View style={{ padding: 20, gap: 16 }}>
-        <View style={{ flexDirection: 'row', gap: 12 }}>
-          <StatCard title="Месечен доход" value={`€${monthlyIncome.toFixed(0)}`} sub={`${activeLeases.length} акт. договора`} color="#2563EB" card={card} text={text} sub2={sub} border={border} />
-          <StatCard title="Заетост" value={`${occupancyRate}%`} sub={`${rentedCount} / ${props.length} имота`} color="#16A34A" card={card} text={text} sub2={sub} border={border} />
+      <View style={{ paddingHorizontal: spacing.xl, gap: spacing.lg }}>
+        {/* Hero — expected monthly income */}
+        <View
+          style={{
+            backgroundColor: t.primary,
+            borderRadius: radius.xl,
+            padding: spacing.xxl,
+            ...shadow.lg,
+            shadowColor: t.primary,
+          }}>
+          <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: '700', letterSpacing: 0.4 }}>
+            ОЧАКВАН МЕСЕЧЕН ДОХОД
+          </Text>
+          <Text style={{ color: '#fff', fontSize: 34, fontWeight: '800', marginTop: 8, letterSpacing: -0.5 }}>
+            {fmtMap(incomeBy)}
+          </Text>
+          <View
+            style={{
+              flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+              marginTop: spacing.lg, paddingTop: spacing.lg, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.2)',
+            }}>
+            <HeroStat label="Активни договори" value={String(activeLeases.length)} />
+            <HeroStat label="Имоти" value={String(props.length)} />
+            <HeroStat label="Заетост" value={`${occupancyRate}%`} />
+          </View>
         </View>
 
-        <View style={{ flexDirection: 'row', gap: 12 }}>
-          <StatCard title="Събрано" value={`€${collected.toFixed(0)}`} sub={currentPeriod} color="#16A34A" card={card} text={text} sub2={sub} border={border} />
-          <StatCard title="Дължимо" value={`€${owed.toFixed(0)}`} sub={currentPeriod} color={owed > 0 ? '#D97706' : '#16A34A'} card={card} text={text} sub2={sub} border={border} />
+        {/* Collected / outstanding this month */}
+        <View style={{ flexDirection: 'row', gap: spacing.md }}>
+          <StatTile label="Събрано" sub={monthCapitalized} value={fmtMap(collectedBy)} tone="success" />
+          <StatTile label="Дължимо" sub={monthCapitalized} value={fmtMap(owedBy)} tone={totalOwed > 0 ? 'warning' : 'success'} />
         </View>
 
-        {overdueLeases.length > 0 && (
-          <View style={{ backgroundColor: '#FEF3C7', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#FDE68A' }}>
-            <Text style={{ fontSize: 14, fontWeight: '700', color: '#92400E' }}>⚠️ Просрочени плащания</Text>
-            <Text style={{ fontSize: 13, color: '#92400E', marginTop: 4 }}>
-              {overdueLeases.length} договор{overdueLeases.length > 1 ? 'а' : ''} с изминал ден на плащане без записано плащане
-            </Text>
-          </View>
-        )}
+        {/* Occupancy */}
+        {props.length > 0 ? (
+          <Card>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md }}>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: t.text }}>Заетост</Text>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: t.textSecondary }}>
+                {rentedCount} / {props.length} имота
+              </Text>
+            </View>
+            <ProgressBar value={occupancyRate} tone={occupancyRate >= 70 ? 'success' : 'primary'} />
+          </Card>
+        ) : null}
 
-        {props.length === 0 && (
-          <View style={{ backgroundColor: card, borderRadius: 12, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: border }}>
-            <Text style={{ fontSize: 32 }}>🏠</Text>
-            <Text style={{ fontSize: 16, fontWeight: '600', color: text, marginTop: 12 }}>Начало</Text>
-            <Text style={{ fontSize: 14, color: sub, marginTop: 6, textAlign: 'center' }}>
-              Добавете първия си имот в раздел Имоти
-            </Text>
+        {/* Overdue alert */}
+        {overdueLeases.length > 0 ? (
+          <Card style={{ backgroundColor: t.warningSoft, borderColor: t.warning + '55' }}>
+            <View style={{ flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' }}>
+              <Text style={{ fontSize: 22 }}>⚠️</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 15, fontWeight: '800', color: t.warning }}>Просрочени плащания</Text>
+                <Text style={{ fontSize: 13, color: t.warning, marginTop: 4, lineHeight: 19 }}>
+                  {overdueLeases.length} договор{overdueLeases.length > 1 ? 'а' : ''} с изминал ден на плащане без записано плащане за {monthCapitalized.toLowerCase()}.
+                </Text>
+              </View>
+            </View>
+          </Card>
+        ) : null}
+
+        {/* First-run empty state */}
+        {props.length === 0 ? (
+          <View style={{ marginTop: spacing.xxl }}>
+            <EmptyState
+              icon="🏠"
+              title="Добре дошли в RentTrack"
+              message="Започнете, като добавите първия си имот в раздел „Имоти“."
+            />
           </View>
-        )}
+        ) : null}
       </View>
     </ScrollView>
   );
 }
 
-function StatCard({ title, value, sub, color, card, text, sub2, border }: {
-  title: string; value: string; sub: string; color: string;
-  card: string; text: string; sub2: string; border: string;
-}) {
+function HeroStat({ label, value }: { label: string; value: string }) {
   return (
-    <View style={{ flex: 1, backgroundColor: card, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: border }}>
-      <Text style={{ fontSize: 12, fontWeight: '600', color: sub2, textTransform: 'uppercase', letterSpacing: 0.5 }}>{title}</Text>
-      <Text style={{ fontSize: 24, fontWeight: '700', color, marginTop: 8 }}>{value}</Text>
-      <Text style={{ fontSize: 12, color: sub2, marginTop: 4 }}>{sub}</Text>
+    <View>
+      <Text style={{ color: '#fff', fontSize: 20, fontWeight: '800' }}>{value}</Text>
+      <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 12, marginTop: 2 }}>{label}</Text>
     </View>
+  );
+}
+
+function StatTile({ label, sub, value, tone }: { label: string; sub: string; value: string; tone: 'success' | 'warning' }) {
+  const t = useTheme();
+  const color = tone === 'warning' ? t.warning : t.success;
+  return (
+    <Card style={{ flex: 1 }}>
+      <Text style={{ fontSize: 12, fontWeight: '700', color: t.textSecondary, letterSpacing: 0.3 }}>{label.toUpperCase()}</Text>
+      <Text style={{ fontSize: 20, fontWeight: '800', color, marginTop: 8 }} numberOfLines={1} adjustsFontSizeToFit>
+        {value}
+      </Text>
+      <Text style={{ fontSize: 12, color: t.textMuted, marginTop: 4 }}>{sub}</Text>
+    </Card>
   );
 }
