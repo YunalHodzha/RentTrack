@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($ghPath = Get-ChildItem \"C:\\\\Program Files\\\\GitHub CLI\" -Filter \"gh.exe\" -ErrorAction SilentlyContinue; $ghPath.FullName)",
+      "PowerShell($env:PATH += \";C:\\\\Program Files\\\\GitHub CLI\"; gh --version)",
+      "Bash(git --version)",
+      "Bash(git init *)",
+      "Bash(git remote *)",
+      "Bash(git add *)"
+    ]
+  }
+}
