@@ -79,6 +79,26 @@ export default function PropertyDetailScreen() {
     setAddLeaseVisible(false);
   }
 
+  // Create a tenant inline from the lease modal. Persists to the DB (so it also
+  // shows up in the Наематели tab) and updates the in-modal list so it can be
+  // selected immediately.
+  async function handleCreateTenant(data: { name: string; phone: string | null }): Promise<Tenant> {
+    const now = new Date().toISOString();
+    const tenant: Tenant = {
+      id: generateId(),
+      name: data.name,
+      phone: data.phone,
+      email: null,
+      notes: null,
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+    };
+    await db.insert(tenants).values(tenant);
+    setAllTenants((prev) => [...prev, tenant]);
+    return tenant;
+  }
+
   function handleEndLease() {
     if (!activeLease || !property) return;
     Alert.alert('Приключи договора', 'Сигурни ли сте? Имотът ще бъде маркиран като свободен.', [
@@ -327,6 +347,7 @@ export default function PropertyDetailScreen() {
           tenantList={allTenants}
           onClose={() => setAddLeaseVisible(false)}
           onSave={handleAddLease}
+          onCreateTenant={handleCreateTenant}
         />
       ) : null}
 
@@ -365,11 +386,12 @@ function StatusLine({ tone, text }: { tone: Tone; text: string }) {
   );
 }
 
-function AddLeaseModal({ visible, tenantList, onClose, onSave }: {
+function AddLeaseModal({ visible, tenantList, onClose, onSave, onCreateTenant }: {
   visible: boolean;
   tenantList: Tenant[];
   onClose: () => void;
   onSave: (data: { tenantId: string; rentAmount: number; currency: Currency; paymentDay: number; startDate: string; depositAmount: number | null; notes: string | null }) => void;
+  onCreateTenant: (data: { name: string; phone: string | null }) => Promise<Tenant>;
 }) {
   const t = useTheme();
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
@@ -380,10 +402,33 @@ function AddLeaseModal({ visible, tenantList, onClose, onSave }: {
   const [depositAmount, setDepositAmount] = useState('');
   const [notes, setNotes] = useState('');
 
+  // Inline "new tenant" mini-form state.
+  const [showNewTenant, setShowNewTenant] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newPhone, setNewPhone] = useState('');
+  const [creating, setCreating] = useState(false);
+
+  function resetNewTenant() { setShowNewTenant(false); setNewName(''); setNewPhone(''); }
+
   function reset() {
     setSelectedTenantId(null); setRentAmount(''); setCurrency('EUR');
     setPaymentDay('1'); setStartDate(format(new Date(), 'yyyy-MM-dd'));
     setDepositAmount(''); setNotes('');
+    resetNewTenant();
+  }
+
+  async function handleCreateTenant() {
+    if (!newName.trim()) { Alert.alert('Задължително', 'Моля, въведете името на наемателя.'); return; }
+    setCreating(true);
+    try {
+      const tenant = await onCreateTenant({ name: newName.trim(), phone: newPhone.trim() || null });
+      setSelectedTenantId(tenant.id);
+      resetNewTenant();
+    } catch {
+      Alert.alert('Грешка', 'Неуспешно добавяне на наемател.');
+    } finally {
+      setCreating(false);
+    }
   }
 
   function handleSave() {
@@ -403,31 +448,50 @@ function AddLeaseModal({ visible, tenantList, onClose, onSave }: {
   return (
     <SheetModal visible={visible} onClose={handleClose} onSave={handleSave} title="Нов договор">
       <Field label="Наемател *">
-        {tenantList.length === 0 ? (
-          <View style={{ backgroundColor: t.inputBg, borderRadius: radius.md, padding: 14, borderWidth: 1, borderColor: t.inputBorder }}>
-            <Text style={{ color: t.textSecondary, fontSize: 14 }}>Добавете наематели от раздел „Наематели“.</Text>
-          </View>
-        ) : (
-          <View style={{ gap: spacing.sm }}>
-            {tenantList.map((tenant) => {
-              const active = selectedTenantId === tenant.id;
-              return (
-                <TouchableOpacity
-                  key={tenant.id}
-                  activeOpacity={0.8}
-                  onPress={() => setSelectedTenantId(tenant.id)}
-                  style={{
-                    padding: 14, borderRadius: radius.md,
-                    backgroundColor: active ? t.primarySoft : t.inputBg,
-                    borderWidth: 1, borderColor: active ? t.primary : t.inputBorder,
-                  }}>
-                  <Text style={{ color: active ? t.primary : t.text, fontWeight: active ? '800' : '500', fontSize: 15 }}>{tenant.name}</Text>
-                  {tenant.phone ? <Text style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{tenant.phone}</Text> : null}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
+        <View style={{ gap: spacing.sm }}>
+          {tenantList.map((tenant) => {
+            const active = selectedTenantId === tenant.id;
+            return (
+              <TouchableOpacity
+                key={tenant.id}
+                activeOpacity={0.8}
+                onPress={() => setSelectedTenantId(tenant.id)}
+                style={{
+                  padding: 14, borderRadius: radius.md,
+                  backgroundColor: active ? t.primarySoft : t.inputBg,
+                  borderWidth: 1, borderColor: active ? t.primary : t.inputBorder,
+                }}>
+                <Text style={{ color: active ? t.primary : t.text, fontWeight: active ? '800' : '500', fontSize: 15 }}>{tenant.name}</Text>
+                {tenant.phone ? <Text style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{tenant.phone}</Text> : null}
+              </TouchableOpacity>
+            );
+          })}
+
+          {tenantList.length === 0 && !showNewTenant ? (
+            <Text style={{ color: t.textSecondary, fontSize: 14 }}>Все още няма наематели. Добавете нов по-долу.</Text>
+          ) : null}
+
+          {showNewTenant ? (
+            <View style={{ backgroundColor: t.inputBg, borderRadius: radius.md, padding: 14, borderWidth: 1, borderColor: t.inputBorder, gap: spacing.sm }}>
+              <Input value={newName} onChangeText={setNewName} placeholder="Име на наемателя *" />
+              <Input value={newPhone} onChangeText={setNewPhone} placeholder="Телефон (по избор)" keyboardType="phone-pad" />
+              <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs }}>
+                <Button label="Откажи" variant="secondary" onPress={resetNewTenant} style={{ flex: 1 }} />
+                <Button label={creating ? 'Добавяне…' : 'Добави'} onPress={handleCreateTenant} disabled={creating} style={{ flex: 1 }} />
+              </View>
+            </View>
+          ) : (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setShowNewTenant(true)}
+              style={{
+                padding: 14, borderRadius: radius.md, alignItems: 'center',
+                borderWidth: 1, borderColor: t.primary, borderStyle: 'dashed',
+              }}>
+              <Text style={{ color: t.primary, fontWeight: '700', fontSize: 15 }}>+ Нов наемател</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </Field>
 
       <Field label="Наемна сума *">
