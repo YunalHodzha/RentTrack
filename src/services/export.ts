@@ -37,8 +37,14 @@ export async function exportDataAsCSV(): Promise<string> {
 
   const escapeCSV = (val: string | number | null | undefined): string => {
     if (val === null || val === undefined) return '';
-    const str = String(val);
+    let str = String(val);
     if (!str) return '';
+    // Guard against CSV/formula injection: spreadsheet apps execute cells that
+    // start with = + - @ (or tab/CR). Prefix such values with a single quote so
+    // they're treated as text. Relevant once exports contain other users' data.
+    if (/^[=+\-@\t\r]/.test(str)) {
+      str = `'${str}`;
+    }
     const escaped = str.replace(/"/g, '""');
     return escaped.includes(',') || escaped.includes('"') || escaped.includes('\n')
       ? `"${escaped}"`
@@ -102,4 +108,62 @@ export function generateFileName(format: 'json' | 'csv'): string {
   const now = new Date();
   const dateStr = now.toISOString().split('T')[0];
   return `renttrack-export-${dateStr}.${format}`;
+}
+
+export interface ImportResult {
+  properties: number;
+  tenants: number;
+  leases: number;
+  payments: number;
+}
+
+/**
+ * Restore data from a JSON export string. This REPLACES all existing data
+ * (full restore semantics) inside a single transaction so a malformed file
+ * can't leave the database half-written.
+ *
+ * Tables are inserted parent-first (properties/tenants → leases → payments) to
+ * satisfy the foreign keys, and cleared child-first.
+ */
+export function importDataFromJSON(json: string): ImportResult {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    throw new Error('Невалиден JSON файл.');
+  }
+
+  const data = parsed as Partial<ExportData>;
+  if (
+    !data ||
+    !Array.isArray(data.properties) ||
+    !Array.isArray(data.tenants) ||
+    !Array.isArray(data.leases) ||
+    !Array.isArray(data.payments)
+  ) {
+    throw new Error('Файлът не е валиден RentTrack експорт.');
+  }
+
+  // expo-sqlite transactions are synchronous: the callback must use .run()
+  // (not await) so all writes complete before the implicit commit fires.
+  db.transaction((tx) => {
+    // Clear existing data child-first to respect foreign keys.
+    tx.delete(payments).run();
+    tx.delete(leases).run();
+    tx.delete(properties).run();
+    tx.delete(tenants).run();
+
+    // Insert parent-first.
+    if (data.properties!.length) tx.insert(properties).values(data.properties as Property[]).run();
+    if (data.tenants!.length) tx.insert(tenants).values(data.tenants as Tenant[]).run();
+    if (data.leases!.length) tx.insert(leases).values(data.leases as Lease[]).run();
+    if (data.payments!.length) tx.insert(payments).values(data.payments as Payment[]).run();
+  });
+
+  return {
+    properties: data.properties!.length,
+    tenants: data.tenants!.length,
+    leases: data.leases!.length,
+    payments: data.payments!.length,
+  };
 }

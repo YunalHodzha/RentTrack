@@ -131,10 +131,23 @@ export function formatDate(date: string | null | undefined): string {
   return month ? `${Number(m[3])} ${month} ${m[1]}` : date;
 }
 
-/** Check if a payment is overdue based on period, payment day, and today's date. */
+/** Number of days in a given month. `month` is 1-based (1 = January). */
+function daysInMonth(year: number, month: number): number {
+  return new Date(year, month, 0).getDate();
+}
+
+/**
+ * Check if a payment is overdue based on period, payment day, and today's date.
+ * The payment day is clamped to the actual length of the month so that e.g.
+ * paymentDay=31 in February resolves to the 28th/29th rather than an invalid
+ * "2026-02-31".
+ */
 export function isPaymentOverdue(period: string, paymentDay: number, today: string = new Date().toISOString().split('T')[0]): boolean {
   const m = /^(\d{4})-(\d{2})$/.exec(period);
   if (!m) return false;
-  const dueDate = `${m[1]}-${m[2]}-${String(paymentDay).padStart(2, '0')}`;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const clampedDay = Math.min(paymentDay, daysInMonth(year, month));
+  const dueDate = `${m[1]}-${m[2]}-${String(clampedDay).padStart(2, '0')}`;
   return today > dueDate;
 }

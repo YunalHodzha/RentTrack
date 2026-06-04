@@ -1,13 +1,15 @@
 import { useCallback, useState } from 'react';
-import { View, Text, ScrollView, Alert, Share, Clipboard } from 'react-native';
+import { View, Text, ScrollView, Alert, Share } from 'react-native';
 import { useFocusEffect } from '@react-navigation/core';
+import * as DocumentPicker from 'expo-document-picker';
+import { File } from 'expo-file-system';
 import {
   Screen, Header, Card, SectionTitle, Field, Input, ChipGroup, Button,
   useTheme, spacing, Divider,
 } from '@/components/ui';
 import { useSettingsStore } from '@/store/settings';
 import { schedulePaymentReminders } from '@/services/notifications';
-import { exportDataAsJSON, exportDataAsCSV } from '@/services/export';
+import { exportDataAsJSON, exportDataAsCSV, importDataFromJSON } from '@/services/export';
 import type { Currency } from '@/lib/domain';
 
 const CURRENCIES = [
@@ -70,6 +72,47 @@ export default function SettingsScreen() {
     }
   }
 
+  async function handleImportJSON() {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/json', 'text/plain', '*/*'],
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+
+      const asset = result.assets[0];
+      const json = await new File(asset.uri).text();
+
+      Alert.alert(
+        'Възстановяване на данни',
+        'Това ще ЗАМЕНИ всички текущи данни с тези от файла. Сигурни ли сте?',
+        [
+          { text: 'Отказ', style: 'cancel' },
+          {
+            text: 'Възстанови',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                const counts = importDataFromJSON(json);
+                await schedulePaymentReminders();
+                Alert.alert(
+                  'Успех',
+                  `Внесени: ${counts.properties} имота, ${counts.tenants} наематели, ${counts.leases} договора, ${counts.payments} плащания.`
+                );
+              } catch (err) {
+                Alert.alert('Грешка', err instanceof Error ? err.message : 'Неуспешно внасяне.');
+                console.error(err);
+              }
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      Alert.alert('Грешка', 'Неуспешно отваряне на файла.');
+      console.error(error);
+    }
+  }
+
   return (
     <Screen>
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
@@ -115,6 +158,14 @@ export default function SettingsScreen() {
             <Button label="Експорт като JSON" variant="secondary" onPress={handleExportJSON} fullWidth />
             <Button label="Експорт като CSV" variant="secondary" onPress={handleExportCSV} fullWidth />
           </View>
+        </Card>
+
+        <SectionTitle>Възстановяване на данни</SectionTitle>
+        <Card style={{ marginBottom: spacing.lg }}>
+          <Text style={{ fontSize: 13, color: t.textMuted, marginBottom: spacing.lg }}>
+            Внесете данни от JSON архив. Това ще замени всички текущи данни.
+          </Text>
+          <Button label="Внеси от JSON" variant="secondary" onPress={handleImportJSON} fullWidth />
         </Card>
       </ScrollView>
     </Screen>

@@ -184,5 +184,23 @@ describe('domain utilities', () => {
     it('returns false for unparseable period', () => {
       expect(isPaymentOverdue('invalid', 1, '2026-06-05')).toBe(false);
     });
+
+    it('clamps day 31 to end of February (non-leap year)', () => {
+      // 2026 is not a leap year → Feb has 28 days; day 31 clamps to the 28th.
+      expect(isPaymentOverdue('2026-02', 31, '2026-02-28')).toBe(false);
+      expect(isPaymentOverdue('2026-02', 31, '2026-03-01')).toBe(true);
+    });
+
+    it('clamps day 31 to end of February (leap year)', () => {
+      // 2024 is a leap year → Feb has 29 days; day 31 clamps to the 29th.
+      expect(isPaymentOverdue('2024-02', 31, '2024-02-29')).toBe(false);
+      expect(isPaymentOverdue('2024-02', 31, '2024-03-01')).toBe(true);
+    });
+
+    it('clamps day 31 in 30-day months', () => {
+      // April has 30 days; day 31 clamps to the 30th.
+      expect(isPaymentOverdue('2026-04', 31, '2026-04-30')).toBe(false);
+      expect(isPaymentOverdue('2026-04', 31, '2026-05-01')).toBe(true);
+    });
   });
 });
