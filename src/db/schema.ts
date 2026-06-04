@@ -1,4 +1,4 @@
-import { index, real, sqliteTable, text, unique } from 'drizzle-orm/sqlite-core';
+import { index, int, real, sqliteTable, text, unique } from 'drizzle-orm/sqlite-core';
 
 export const properties = sqliteTable('properties', {
   id: text('id').primaryKey(),
@@ -29,7 +29,7 @@ export const leases = sqliteTable('leases', {
   tenantId: text('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   rentAmount: real('rent_amount').notNull(),
   currency: text('currency', { enum: ['EUR', 'BGN'] }).notNull().default('EUR'),
-  paymentDay: real('payment_day').notNull(),
+  paymentDay: int('payment_day').notNull(),
   startDate: text('start_date').notNull(),
   endDate: text('end_date'),
   depositAmount: real('deposit_amount'),

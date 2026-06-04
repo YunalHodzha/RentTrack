@@ -77,9 +77,9 @@ export async function schedulePaymentReminders() {
             data: { propertyId: lease.propertyId },
           },
           trigger: {
-            type: 'date',
+            type: Notifications.SchedulableTriggerInputTypes.DATE,
             date: reminderDate,
-          } as Notifications.NotificationTriggerInput,
+          },
         });
       }
     }
