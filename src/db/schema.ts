@@ -39,7 +39,7 @@ export const payments = sqliteTable('payments', {
   period: text('period').notNull(),
   amount: real('amount').notNull(),
   paidDate: text('paid_date'),
-  status: text('status', { enum: ['paid', 'partial', 'pending'] }).notNull().default('pending'),
+  status: text('status', { enum: ['paid', 'partial', 'pending', 'overdue'] }).notNull().default('pending'),
   method: text('method', { enum: ['cash', 'bank', 'other'] }),
   notes: text('notes'),
 });

@@ -1,43 +1,56 @@
 import { Tabs } from 'expo-router';
-import { useColorScheme } from 'react-native';
+import { Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '@/theme';
 
 export default function TabsLayout() {
-  const scheme = useColorScheme();
-  const isDark = scheme === 'dark';
+  const t = useTheme();
+  const insets = useSafeAreaInsets();
+  // Respect the bottom safe-area inset (Android nav buttons / iOS home indicator)
+  // so the tab bar never sits underneath the system navigation.
+  const bottomPad = Math.max(insets.bottom, 10);
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#2563EB',
-        tabBarInactiveTintColor: isDark ? '#6B7280' : '#9CA3AF',
+        tabBarActiveTintColor: t.primary,
+        tabBarInactiveTintColor: t.textMuted,
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '700' },
+        tabBarItemStyle: { paddingTop: 6 },
         tabBarStyle: {
-          backgroundColor: isDark ? '#111827' : '#FFFFFF',
-          borderTopColor: isDark ? '#1F2937' : '#E5E7EB',
+          backgroundColor: t.card,
+          borderTopColor: t.border,
+          borderTopWidth: 1,
+          height: 58 + bottomPad,
+          paddingTop: 6,
+          paddingBottom: bottomPad,
         },
       }}>
       <Tabs.Screen
         name="index"
-        options={{ title: 'Dashboard', tabBarIcon: ({ color }) => <TabIcon name="dashboard" color={color} /> }}
+        options={{ title: 'Табло', tabBarIcon: ({ focused }) => <TabIcon icon="📊" focused={focused} /> }}
       />
       <Tabs.Screen
         name="properties"
-        options={{ title: 'Properties', tabBarIcon: ({ color }) => <TabIcon name="properties" color={color} /> }}
+        options={{ title: 'Имоти', tabBarIcon: ({ focused }) => <TabIcon icon="🏠" focused={focused} /> }}
       />
       <Tabs.Screen
         name="tenants"
-        options={{ title: 'Tenants', tabBarIcon: ({ color }) => <TabIcon name="tenants" color={color} /> }}
+        options={{ title: 'Наематели', tabBarIcon: ({ focused }) => <TabIcon icon="👥" focused={focused} /> }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{ title: 'Настройки', tabBarIcon: ({ focused }) => <TabIcon icon="⚙️" focused={focused} /> }}
       />
     </Tabs>
   );
 }
 
-function TabIcon({ name, color }: { name: string; color: string }) {
-  const icons: Record<string, string> = {
-    dashboard: '📊',
-    properties: '🏠',
-    tenants: '👥',
-  };
-  const { Text } = require('react-native');
-  return <Text style={{ fontSize: 20 }}>{icons[name]}</Text>;
+function TabIcon({ icon, focused }: { icon: string; focused: boolean }) {
+  return (
+    <View style={{ alignItems: 'center', justifyContent: 'center', opacity: focused ? 1 : 0.55 }}>
+      <Text style={{ fontSize: 20 }}>{icon}</Text>
+    </View>
+  );
 }
