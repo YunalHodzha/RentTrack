@@ -6,6 +6,7 @@ import { db } from '@/db/client';
 import { properties } from '@/db/schema';
 import { useAppStore } from '@/store';
 import type { NewProperty, Property } from '@/db/schema';
+import { generateId } from '@/lib/uuid';
 import {
   Screen, Header, Card, Badge, IconBadge, FAB, EmptyState, SheetModal, Field, Input, ChipGroup,
   useTheme, spacing,
@@ -84,7 +85,7 @@ function AddPropertyModal({ visible, onClose, onSave }: {
 
   function handleSave() {
     if (!name.trim()) { Alert.alert('Задължително', 'Моля, въведете името на имота.'); return; }
-    onSave({ name: name.trim(), address: address.trim() || null, type, status: 'free', notes: notes.trim() || null, createdAt: new Date().toISOString() });
+    onSave({ id: generateId(), name: name.trim(), address: address.trim() || null, type, status: 'free', notes: notes.trim() || null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     reset();
   }
 

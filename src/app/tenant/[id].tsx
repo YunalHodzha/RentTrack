@@ -31,20 +31,19 @@ export default function TenantDetailScreen() {
 
   async function loadData() {
     if (!id) return;
-    const tenantId = Number(id);
 
-    const [tn] = await db.select().from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+    const [tn] = await db.select().from(tenants).where(eq(tenants.id, id)).limit(1);
     if (!tn) { router.back(); return; }
     setTenant(tn);
 
-    const tLeases = await db.select().from(leases).where(eq(leases.tenantId, tenantId));
+    const tLeases = await db.select().from(leases).where(eq(leases.tenantId, id));
     setHasAnyLease(tLeases.length > 0);
 
     const active = tLeases.find((l) => l.status === 'active') ?? null;
     setActiveLease(active);
 
     const allProps = await db.select().from(properties);
-    const propName = (pid: number) => allProps.find((p) => p.id === pid)?.name ?? '—';
+    const propName = (pid: string) => allProps.find((p) => p.id === pid)?.name ?? '—';
     setActiveProperty(active ? allProps.find((p) => p.id === active.propertyId) ?? null : null);
 
     const rows: PayRow[] = [];

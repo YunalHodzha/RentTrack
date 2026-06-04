@@ -7,6 +7,7 @@ import { tenants, leases } from '@/db/schema';
 import { useAppStore } from '@/store';
 import { eq } from 'drizzle-orm';
 import type { NewTenant, Tenant } from '@/db/schema';
+import { generateId } from '@/lib/uuid';
 import {
   Screen, Header, Card, Avatar, Badge, FAB, EmptyState, SheetModal, Field, Input,
   useTheme, spacing,
@@ -15,7 +16,7 @@ import {
 export default function TenantsScreen() {
   const t = useTheme();
   const { tenants: list, setTenants } = useAppStore();
-  const [activeIds, setActiveIds] = useState<Set<number>>(new Set());
+  const [activeIds, setActiveIds] = useState<Set<string>>(new Set());
   const [modalVisible, setModalVisible] = useState(false);
 
   async function loadTenants() {
@@ -89,7 +90,7 @@ function AddTenantModal({ visible, onClose, onSave }: {
 
   function handleSave() {
     if (!name.trim()) { Alert.alert('Задължително', 'Моля, въведете името на наемателя.'); return; }
-    onSave({ name: name.trim(), phone: phone.trim() || null, email: email.trim() || null, notes: notes.trim() || null, createdAt: new Date().toISOString() });
+    onSave({ id: generateId(), name: name.trim(), phone: phone.trim() || null, email: email.trim() || null, notes: notes.trim() || null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     reset();
   }
 

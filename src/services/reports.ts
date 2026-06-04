@@ -9,7 +9,7 @@ export interface MonthlyReport {
   collected: number;
   outstanding: number;
   propertyBreakdown: Array<{
-    propertyId: number;
+    propertyId: string;
     propertyName: string;
     rentAmount: number;
     collected: number;
@@ -95,7 +95,7 @@ export async function generateYearlyReport(year: number): Promise<YearlyReport> 
 }
 
 export async function generatePropertyReport(
-  propertyId: number,
+  propertyId: string,
   startPeriod: string,
   endPeriod: string
 ): Promise<Array<{

@@ -7,6 +7,7 @@ import { format } from 'date-fns';
 import { db } from '@/db/client';
 import { properties, leases, tenants, payments } from '@/db/schema';
 import type { Property, Lease, Tenant, Payment } from '@/db/schema';
+import { generateId } from '@/lib/uuid';
 import { schedulePaymentReminders } from '@/services/notifications';
 import {
   Screen, Card, Badge, IconBadge, SectionTitle, Button, Field, Input, ChipGroup,
@@ -39,14 +40,13 @@ export default function PropertyDetailScreen() {
 
   async function loadData() {
     if (!id) return;
-    const propId = Number(id);
 
-    const [prop] = await db.select().from(properties).where(eq(properties.id, propId)).limit(1);
+    const [prop] = await db.select().from(properties).where(eq(properties.id, id)).limit(1);
     if (!prop) { router.back(); return; }
     setProperty(prop);
 
     const [lease] = await db.select().from(leases)
-      .where(and(eq(leases.propertyId, propId), eq(leases.status, 'active')))
+      .where(and(eq(leases.propertyId, id), eq(leases.status, 'active')))
       .limit(1);
     setActiveLease(lease ?? null);
 
@@ -68,12 +68,13 @@ export default function PropertyDetailScreen() {
   const currency: Currency = (activeLease?.currency as Currency) ?? 'EUR';
 
   async function handleAddLease(data: {
-    tenantId: number; rentAmount: number; currency: Currency;
+    tenantId: string; rentAmount: number; currency: Currency;
     paymentDay: number; startDate: string; depositAmount: number | null; notes: string | null;
   }) {
     if (!property) return;
-    await db.insert(leases).values({ propertyId: property.id, status: 'active', ...data });
-    await db.update(properties).set({ status: 'rented' }).where(eq(properties.id, property.id));
+    const now = new Date().toISOString();
+    await db.insert(leases).values({ id: generateId(), propertyId: property.id, status: 'active', createdAt: now, updatedAt: now, ...data });
+    await db.update(properties).set({ status: 'rented', updatedAt: now }).where(eq(properties.id, property.id));
     await loadData();
     setAddLeaseVisible(false);
   }
@@ -87,8 +88,9 @@ export default function PropertyDetailScreen() {
         style: 'destructive',
         onPress: async () => {
           const today = new Date().toISOString().split('T')[0];
-          await db.update(leases).set({ status: 'ended', endDate: today }).where(eq(leases.id, activeLease.id));
-          await db.update(properties).set({ status: 'free' }).where(eq(properties.id, property.id));
+          const now = new Date().toISOString();
+          await db.update(leases).set({ status: 'ended', endDate: today, updatedAt: now }).where(eq(leases.id, activeLease.id));
+          await db.update(properties).set({ status: 'free', updatedAt: now }).where(eq(properties.id, property.id));
           await loadData();
         },
       },
@@ -98,18 +100,19 @@ export default function PropertyDetailScreen() {
   async function handleSavePayment(rows: PaymentInput[]) {
     if (!activeLease || !paymentModal) return;
     const today = new Date().toISOString().split('T')[0];
+    const now = new Date().toISOString();
 
     if (paymentModal.mode === 'edit' && paymentModal.payment) {
       const prev = paymentModal.payment;
       const data = rows[0];
       const paidDate = data.status === 'paid' ? (prev.paidDate ?? today) : prev.paidDate ?? null;
-      await db.update(payments).set({ ...data, paidDate }).where(eq(payments.id, prev.id));
+      await db.update(payments).set({ ...data, paidDate, updatedAt: now }).where(eq(payments.id, prev.id));
     } else {
       // Advance payment: one paid row per covered month so per-period logic
       // (collected totals, "current month" status, future reminders) stays correct.
       for (const data of rows) {
         const paidDate = data.status === 'paid' ? today : null;
-        await db.insert(payments).values({ leaseId: activeLease.id, paidDate, ...data });
+        await db.insert(payments).values({ id: generateId(), leaseId: activeLease.id, paidDate, createdAt: now, updatedAt: now, ...data });
       }
     }
     await loadData();
@@ -366,10 +369,10 @@ function AddLeaseModal({ visible, tenantList, onClose, onSave }: {
   visible: boolean;
   tenantList: Tenant[];
   onClose: () => void;
-  onSave: (data: { tenantId: number; rentAmount: number; currency: Currency; paymentDay: number; startDate: string; depositAmount: number | null; notes: string | null }) => void;
+  onSave: (data: { tenantId: string; rentAmount: number; currency: Currency; paymentDay: number; startDate: string; depositAmount: number | null; notes: string | null }) => void;
 }) {
   const t = useTheme();
-  const [selectedTenantId, setSelectedTenantId] = useState<number | null>(null);
+  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
   const [rentAmount, setRentAmount] = useState('');
   const [currency, setCurrency] = useState<Currency>('EUR');
   const [paymentDay, setPaymentDay] = useState('1');

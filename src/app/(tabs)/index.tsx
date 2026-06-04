@@ -32,7 +32,7 @@ export default function DashboardScreen() {
   const occupancyRate = props.length > 0 ? Math.round((rentedCount / props.length) * 100) : 0;
 
   // Currency is tracked per lease, so all aggregates are kept per-currency.
-  const currencyOf = (leaseId: number): Currency =>
+  const currencyOf = (leaseId: string): Currency =>
     (leaseList.find((l) => l.id === leaseId)?.currency as Currency) ?? 'EUR';
 
   const currentPaid = payList.filter((p) => p.period === currentPeriod && p.status === 'paid');

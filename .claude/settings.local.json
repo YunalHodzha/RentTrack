@@ -9,7 +9,14 @@
       "Bash(git add *)",
       "Bash(npx tsc *)",
       "Bash(npm install *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(npx expo-doctor *)",
+      "Bash(npx expo *)",
+      "Bash(npx jest *)",
+      "Bash(npm test *)",
+      "Bash(node -e \"const { groupThousands } = require\\('./src/lib/domain.ts'\\); console.log\\(JSON.stringify\\(groupThousands\\(-1234567\\)\\)\\);\")",
+      "Bash(npx expo-ts-check *)"
     ]
   }
 }
