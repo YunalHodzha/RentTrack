@@ -1,4 +1,5 @@
 import * as Notifications from 'expo-notifications';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { router } from 'expo-router';
 import { eq, and } from 'drizzle-orm';
 import { db } from '@/db/client';
@@ -6,18 +7,26 @@ import { leases, payments } from '@/db/schema';
 import { formatPeriod, addPeriodMonths, formatMoney, type Currency } from '@/lib/domain';
 import { useSettingsStore } from '@/store/settings';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+// Notifications were removed from Expo Go in SDK 53. When running in Expo Go we
+// skip all notification work so the app doesn't error; a development build gets
+// the full behaviour. See https://docs.expo.dev/develop/development-builds/introduction/
+const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+
+if (!isExpoGo) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
+  });
+}
 
 let notificationSubscription: Notifications.Subscription | null = null;
 
 export function setupNotificationListeners() {
+  if (isExpoGo) return;
   if (notificationSubscription) notificationSubscription.remove();
 
   notificationSubscription = Notifications.addNotificationResponseReceivedListener((response: Notifications.NotificationResponse) => {
@@ -29,6 +38,7 @@ export function setupNotificationListeners() {
 }
 
 export async function requestNotificationPermissions() {
+  if (isExpoGo) return false;
   const { status } = await Notifications.requestPermissionsAsync();
   return status === 'granted';
 }
@@ -45,6 +55,7 @@ export async function requestNotificationPermissions() {
  *   the system may group or suppress notifications.
  */
 export async function schedulePaymentReminders() {
+  if (isExpoGo) return;
   await Notifications.cancelAllScheduledNotificationsAsync();
 
   const notificationDaysBefore = useSettingsStore.getState().notificationDaysBefore;

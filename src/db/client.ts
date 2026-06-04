@@ -15,27 +15,45 @@ async function tableExists(name: string): Promise<boolean> {
   return row != null;
 }
 
+/** Number of migrations recorded as applied (0 if the tracking table is absent). */
+async function appliedMigrationCount(): Promise<number> {
+  if (!(await tableExists('__drizzle_migrations'))) return 0;
+  const row = await sqlite.getFirstAsync<{ c: number }>(
+    `SELECT count(*) AS c FROM __drizzle_migrations`,
+  );
+  return row?.c ?? 0;
+}
+
 export async function initDatabase() {
   await sqlite.execAsync(`
     PRAGMA journal_mode = WAL;
     PRAGMA foreign_keys = ON;
   `);
 
-  // One-time transition: a dev database created by the old raw-SQL
-  // initDatabase() has the app tables but no __drizzle_migrations record, so
-  // the first migration's CREATE TABLE would fail ("table already exists").
-  // Since pre-migration data is disposable, drop the legacy tables so the
-  // migration can recreate them cleanly. Once migrated, __drizzle_migrations
-  // exists and this branch is skipped.
-  const migrationsTracked = await tableExists('__drizzle_migrations');
-  const legacyTables = await tableExists('properties');
-  if (!migrationsTracked && legacyTables) {
+  // One-time transition to migration-managed schema. Two pre-migration states
+  // both need a clean slate, and pre-migration data is disposable per the review:
+  //   1. Legacy dev DB: app tables created by the old raw-SQL initDatabase(),
+  //      with no __drizzle_migrations table at all.
+  //   2. Broken partial migration: an earlier migrate() created an (empty)
+  //      __drizzle_migrations table, then failed on `CREATE TABLE leases`
+  //      because the legacy table already existed — leaving 0 applied rows.
+  // Detect both via "no applied migrations recorded, yet app tables exist", and
+  // drop everything (including the tracking table) so migrate() starts fresh.
+  // Once a migration is actually recorded, this branch is skipped.
+  const applied = await appliedMigrationCount();
+  const anyAppTable =
+    (await tableExists('properties')) ||
+    (await tableExists('leases')) ||
+    (await tableExists('tenants')) ||
+    (await tableExists('payments'));
+  if (applied === 0 && anyAppTable) {
     await sqlite.execAsync(`
       PRAGMA foreign_keys = OFF;
       DROP TABLE IF EXISTS payments;
       DROP TABLE IF EXISTS leases;
       DROP TABLE IF EXISTS properties;
       DROP TABLE IF EXISTS tenants;
+      DROP TABLE IF EXISTS __drizzle_migrations;
       PRAGMA foreign_keys = ON;
     `);
   }
