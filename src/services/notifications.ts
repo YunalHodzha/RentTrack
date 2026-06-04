@@ -1,4 +1,10 @@
-import * as Notifications from 'expo-notifications';
+// Type-only import: erased at compile time, so it carries NO runtime side
+// effect. expo-notifications' index eagerly runs DevicePushTokenAutoRegistration
+// on evaluation, which warns/errors in Expo Go — importing the runtime module
+// statically would trigger that at app start. We instead require() it lazily,
+// only when NOT in Expo Go (see loadNotifications), so the module is never
+// evaluated under Expo Go.
+import type * as NotificationsModule from 'expo-notifications';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { router } from 'expo-router';
 import { eq, and } from 'drizzle-orm';
@@ -12,7 +18,20 @@ import { useSettingsStore } from '@/store/settings';
 // the full behaviour. See https://docs.expo.dev/develop/development-builds/introduction/
 const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
-if (!isExpoGo) {
+/**
+ * Lazily load the expo-notifications runtime module. Returns null in Expo Go so
+ * the module is never evaluated there (avoiding the push-token side effect).
+ */
+function loadNotifications(): typeof NotificationsModule | null {
+  if (isExpoGo) return null;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('expo-notifications');
+}
+
+let handlerConfigured = false;
+
+function ensureHandler(Notifications: typeof NotificationsModule) {
+  if (handlerConfigured) return;
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowBanner: true,
@@ -21,24 +40,30 @@ if (!isExpoGo) {
       shouldSetBadge: true,
     }),
   });
+  handlerConfigured = true;
 }
 
-let notificationSubscription: Notifications.Subscription | null = null;
+let notificationSubscription: NotificationsModule.Subscription | null = null;
 
 export function setupNotificationListeners() {
-  if (isExpoGo) return;
-  if (notificationSubscription) notificationSubscription.remove();
+  const Notifications = loadNotifications();
+  if (!Notifications) return;
+  ensureHandler(Notifications);
 
-  notificationSubscription = Notifications.addNotificationResponseReceivedListener((response: Notifications.NotificationResponse) => {
-    const propertyId = response.notification.request.content.data?.propertyId;
-    if (propertyId) {
-      router.push(`/property/${propertyId}`);
-    }
-  });
+  if (notificationSubscription) notificationSubscription.remove();
+  notificationSubscription = Notifications.addNotificationResponseReceivedListener(
+    (response: NotificationsModule.NotificationResponse) => {
+      const propertyId = response.notification.request.content.data?.propertyId;
+      if (propertyId) {
+        router.push(`/property/${propertyId}`);
+      }
+    },
+  );
 }
 
 export async function requestNotificationPermissions() {
-  if (isExpoGo) return false;
+  const Notifications = loadNotifications();
+  if (!Notifications) return false;
   const { status } = await Notifications.requestPermissionsAsync();
   return status === 'granted';
 }
@@ -55,7 +80,9 @@ export async function requestNotificationPermissions() {
  *   the system may group or suppress notifications.
  */
 export async function schedulePaymentReminders() {
-  if (isExpoGo) return;
+  const Notifications = loadNotifications();
+  if (!Notifications) return;
+  ensureHandler(Notifications);
   await Notifications.cancelAllScheduledNotificationsAsync();
 
   const notificationDaysBefore = useSettingsStore.getState().notificationDaysBefore;
