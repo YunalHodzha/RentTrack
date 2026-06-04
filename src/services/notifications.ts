@@ -3,7 +3,7 @@ import { router } from 'expo-router';
 import { eq, and } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { leases, payments } from '@/db/schema';
-import { formatPeriod, addPeriodMonths } from '@/lib/domain';
+import { formatPeriod, addPeriodMonths, formatMoney, type Currency } from '@/lib/domain';
 import { useSettingsStore } from '@/store/settings';
 
 Notifications.setNotificationHandler({
@@ -33,6 +33,17 @@ export async function requestNotificationPermissions() {
   return status === 'granted';
 }
 
+/**
+ * Schedule payment reminders for upcoming payment dues.
+ *
+ * IMPORTANT LIMITATIONS:
+ * - Notifications are scheduled up to 3 months in advance only. If the app is not
+ *   opened for more than 3 months, reminders will not be triggered.
+ * - For reliable testing on physical devices, use a development build via EAS
+ *   (not Expo Go). Expo Go has limited notification support from SDK 53+.
+ * - On iOS, the app must have notification permissions granted. On Android 12+,
+ *   the system may group or suppress notifications.
+ */
 export async function schedulePaymentReminders() {
   await Notifications.cancelAllScheduledNotificationsAsync();
 
@@ -58,16 +69,17 @@ export async function schedulePaymentReminders() {
       reminderDate.setDate(reminderDate.getDate() - notificationDaysBefore);
 
       if (reminderDate > today) {
+        const currency = (lease.currency as Currency) ?? 'EUR';
         await Notifications.scheduleNotificationAsync({
           content: {
             title: 'Напомяне за плащане',
-            body: `${lease.rentAmount} е дължимо на ${formatPeriod(period)}`,
+            body: `${formatMoney(lease.rentAmount, currency)} е дължимо на ${formatPeriod(period)}`,
             data: { propertyId: lease.propertyId },
           },
           trigger: {
             type: 'date',
             date: reminderDate,
-          } as any,
+          } as Notifications.NotificationTriggerInput,
         });
       }
     }

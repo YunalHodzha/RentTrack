@@ -16,7 +16,8 @@
       "Bash(npx jest *)",
       "Bash(npm test *)",
       "Bash(node -e \"const { groupThousands } = require\\('./src/lib/domain.ts'\\); console.log\\(JSON.stringify\\(groupThousands\\(-1234567\\)\\)\\);\")",
-      "Bash(npx expo-ts-check *)"
+      "Bash(npx expo-ts-check *)",
+      "Bash(git commit -m 'Complete Task 5: Notification fixes and improvements *)"
     ]
   }
 }
