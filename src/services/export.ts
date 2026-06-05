@@ -1,3 +1,4 @@
+import { isNull } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { properties, leases, tenants, payments } from '@/db/schema';
 import type { Property, Lease, Tenant, Payment } from '@/db/schema';
@@ -12,10 +13,10 @@ export interface ExportData {
 
 export async function exportDataAsJSON(): Promise<ExportData> {
   const [propsData, tenantsData, leasesData, paymentsData] = await Promise.all([
-    db.select().from(properties),
-    db.select().from(tenants),
-    db.select().from(leases),
-    db.select().from(payments),
+    db.select().from(properties).where(isNull(properties.deletedAt)),
+    db.select().from(tenants).where(isNull(tenants.deletedAt)),
+    db.select().from(leases).where(isNull(leases.deletedAt)),
+    db.select().from(payments).where(isNull(payments.deletedAt)),
   ]);
 
   return {
@@ -29,10 +30,10 @@ export async function exportDataAsJSON(): Promise<ExportData> {
 
 export async function exportDataAsCSV(): Promise<string> {
   const [propsData, tenantsData, leasesData, paymentsData] = await Promise.all([
-    db.select().from(properties),
-    db.select().from(tenants),
-    db.select().from(leases),
-    db.select().from(payments),
+    db.select().from(properties).where(isNull(properties.deletedAt)),
+    db.select().from(tenants).where(isNull(tenants.deletedAt)),
+    db.select().from(leases).where(isNull(leases.deletedAt)),
+    db.select().from(payments).where(isNull(payments.deletedAt)),
   ]);
 
   const escapeCSV = (val: string | number | null | undefined): string => {

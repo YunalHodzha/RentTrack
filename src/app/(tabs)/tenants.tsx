@@ -5,7 +5,8 @@ import { useFocusEffect } from '@react-navigation/core';
 import { db } from '@/db/client';
 import { tenants, leases } from '@/db/schema';
 import { useAppStore } from '@/store';
-import { eq } from 'drizzle-orm';
+import { useSyncStore } from '@/store/sync';
+import { eq, and, isNull } from 'drizzle-orm';
 import type { NewTenant, Tenant } from '@/db/schema';
 import { generateId } from '@/lib/uuid';
 import {
@@ -16,19 +17,20 @@ import {
 export default function TenantsScreen() {
   const t = useTheme();
   const { tenants: list, setTenants } = useAppStore();
+  const syncVersion = useSyncStore((s) => s.version);
   const [activeIds, setActiveIds] = useState<Set<string>>(new Set());
   const [modalVisible, setModalVisible] = useState(false);
 
   async function loadTenants() {
     const [rows, activeLeases] = await Promise.all([
-      db.select().from(tenants),
-      db.select().from(leases).where(eq(leases.status, 'active')),
+      db.select().from(tenants).where(isNull(tenants.deletedAt)),
+      db.select().from(leases).where(and(eq(leases.status, 'active'), isNull(leases.deletedAt))),
     ]);
     setTenants(rows);
     setActiveIds(new Set(activeLeases.map((l) => l.tenantId)));
   }
 
-  useFocusEffect(useCallback(() => { loadTenants(); }, []));
+  useFocusEffect(useCallback(() => { loadTenants(); }, [syncVersion]));
 
   async function handleAdd(data: NewTenant) {
     await db.insert(tenants).values(data);

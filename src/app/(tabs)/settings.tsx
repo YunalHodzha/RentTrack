@@ -8,6 +8,9 @@ import {
   useTheme, spacing, Divider,
 } from '@/components/ui';
 import { useSettingsStore } from '@/store/settings';
+import { useAuthStore } from '@/store/auth';
+import { useSyncStore } from '@/store/sync';
+import { syncNow } from '@/services/sync-runtime';
 import { schedulePaymentReminders } from '@/services/notifications';
 import { exportDataAsJSON, exportDataAsCSV, importDataFromJSON } from '@/services/export';
 import type { Currency } from '@/lib/domain';
@@ -20,6 +23,8 @@ const CURRENCIES = [
 export default function SettingsScreen() {
   const t = useTheme();
   const { defaultCurrency, notificationDaysBefore, updateDefaultCurrency, updateNotificationDaysBefore } = useSettingsStore();
+  const { user, signOut } = useAuthStore();
+  const { status: syncStatus, lastSyncedAt, error: syncError } = useSyncStore();
   const [localCurrency, setLocalCurrency] = useState<Currency>(defaultCurrency);
   const [localDaysBefore, setLocalDaysBefore] = useState(String(notificationDaysBefore));
 
@@ -72,6 +77,13 @@ export default function SettingsScreen() {
     }
   }
 
+  function handleSignOut() {
+    Alert.alert('Изход', 'Сигурни ли сте, че искате да излезете?', [
+      { text: 'Отказ', style: 'cancel' },
+      { text: 'Изход', style: 'destructive', onPress: () => { signOut(); } },
+    ]);
+  }
+
   async function handleImportJSON() {
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -117,6 +129,38 @@ export default function SettingsScreen() {
     <Screen>
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
         <Header title="Настройки" />
+
+        <SectionTitle>Акаунт</SectionTitle>
+        <Card style={{ marginBottom: spacing.lg }}>
+          {user?.email ? (
+            <>
+              <Text style={{ fontSize: 13, color: t.textSecondary, marginBottom: 2 }}>Влезли сте като</Text>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: t.text, marginBottom: spacing.lg }}>{user.email}</Text>
+            </>
+          ) : null}
+          <Button label="Изход" variant="danger" onPress={handleSignOut} fullWidth />
+        </Card>
+
+        <SectionTitle>Синхронизация</SectionTitle>
+        <Card style={{ marginBottom: spacing.lg }}>
+          <Text style={{ fontSize: 13, color: t.textSecondary }}>
+            {syncStatus === 'syncing'
+              ? 'Синхронизиране…'
+              : syncStatus === 'error'
+                ? `Грешка: ${syncError ?? 'неуспешна синхронизация'}`
+                : lastSyncedAt
+                  ? `Последна синхронизация: ${new Date(lastSyncedAt).toLocaleString('bg-BG')}`
+                  : 'Все още няма синхронизация'}
+          </Text>
+          <Button
+            label={syncStatus === 'syncing' ? 'Синхронизиране…' : 'Синхронизирай сега'}
+            variant="secondary"
+            onPress={() => { syncNow(); }}
+            disabled={syncStatus === 'syncing'}
+            fullWidth
+            style={{ marginTop: spacing.md }}
+          />
+        </Card>
 
         <SectionTitle>Валута</SectionTitle>
         <Card style={{ marginBottom: spacing.lg }}>

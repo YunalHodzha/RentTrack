@@ -9,27 +9,43 @@ import { initDatabase } from '@/db/client';
 import { markOverduePayments } from '@/db/utils';
 import { requestNotificationPermissions, schedulePaymentReminders, setupNotificationListeners } from '@/services/notifications';
 import { useSettingsStore } from '@/store/settings';
+import { useAuthStore } from '@/store/auth';
+import { setupSyncTriggers } from '@/services/sync-runtime';
 import { Loading } from '@/components/ui';
+import { AuthScreen } from '@/components/auth-screen';
 import { useTheme } from '@/theme';
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const [ready, setReady] = useState(false);
+  const [dbReady, setDbReady] = useState(false);
+  const { session, initializing: authInitializing } = useAuthStore();
   const t = useTheme();
 
   useEffect(() => {
     setupNotificationListeners();
     const loadSettings = useSettingsStore.getState().loadSettings;
+    const initAuth = useAuthStore.getState().init;
     initDatabase()
       .then(() => loadSettings())
       .then(() => markOverduePayments())
       .then(() => requestNotificationPermissions())
       .then(() => schedulePaymentReminders())
-      .then(() => setReady(true))
+      .then(() => initAuth())
+      .then(() => setDbReady(true))
       .catch(console.error)
       .finally(() => SplashScreen.hideAsync());
   }, []);
+
+  const ready = dbReady && !authInitializing;
+
+  // Start sync once signed in; tear it down on sign-out. Keyed by user id so a
+  // token refresh (new session object, same user) doesn't restart the triggers.
+  const userId = session?.user?.id ?? null;
+  useEffect(() => {
+    if (!ready || !userId) return;
+    return setupSyncTriggers();
+  }, [ready, userId]);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -37,6 +53,8 @@ export default function RootLayout() {
         <StatusBar style={t.isDark ? 'light' : 'dark'} />
         {!ready ? (
           <Loading />
+        ) : !session ? (
+          <AuthScreen />
         ) : (
           <Stack
             screenOptions={{

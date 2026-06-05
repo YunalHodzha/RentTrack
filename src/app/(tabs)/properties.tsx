@@ -2,9 +2,11 @@ import { useCallback, useState } from 'react';
 import { View, Text, FlatList, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/core';
+import { isNull } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { properties } from '@/db/schema';
 import { useAppStore } from '@/store';
+import { useSyncStore } from '@/store/sync';
 import type { NewProperty, Property } from '@/db/schema';
 import { generateId } from '@/lib/uuid';
 import {
@@ -16,14 +18,15 @@ import { PROPERTY_TYPES, TYPE_LABELS, TYPE_ICONS, STATUS_LABELS, STATUS_TONE } f
 export default function PropertiesScreen() {
   const t = useTheme();
   const { properties: list, setProperties } = useAppStore();
+  const syncVersion = useSyncStore((s) => s.version);
   const [modalVisible, setModalVisible] = useState(false);
 
   async function loadProperties() {
-    const rows = await db.select().from(properties);
+    const rows = await db.select().from(properties).where(isNull(properties.deletedAt));
     setProperties(rows);
   }
 
-  useFocusEffect(useCallback(() => { loadProperties(); }, []));
+  useFocusEffect(useCallback(() => { loadProperties(); }, [syncVersion]));
 
   async function handleAdd(data: NewProperty) {
     await db.insert(properties).values(data);

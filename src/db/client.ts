@@ -40,22 +40,29 @@ export async function initDatabase() {
   // Detect both via "no applied migrations recorded, yet app tables exist", and
   // drop everything (including the tracking table) so migrate() starts fresh.
   // Once a migration is actually recorded, this branch is skipped.
-  const applied = await appliedMigrationCount();
-  const anyAppTable =
-    (await tableExists('properties')) ||
-    (await tableExists('leases')) ||
-    (await tableExists('tenants')) ||
-    (await tableExists('payments'));
-  if (applied === 0 && anyAppTable) {
-    await sqlite.execAsync(`
-      PRAGMA foreign_keys = OFF;
-      DROP TABLE IF EXISTS payments;
-      DROP TABLE IF EXISTS leases;
-      DROP TABLE IF EXISTS properties;
-      DROP TABLE IF EXISTS tenants;
-      DROP TABLE IF EXISTS __drizzle_migrations;
-      PRAGMA foreign_keys = ON;
-    `);
+  //
+  // DESTRUCTIVE — gated behind __DEV__ so it can never wipe a real user's data
+  // in a production build. These pre-migration states only ever existed on dev
+  // machines (there are no shipped users yet). Before Phase 5 / first release,
+  // this branch should be replaced with a non-destructive recovery path.
+  if (__DEV__) {
+    const applied = await appliedMigrationCount();
+    const anyAppTable =
+      (await tableExists('properties')) ||
+      (await tableExists('leases')) ||
+      (await tableExists('tenants')) ||
+      (await tableExists('payments'));
+    if (applied === 0 && anyAppTable) {
+      await sqlite.execAsync(`
+        PRAGMA foreign_keys = OFF;
+        DROP TABLE IF EXISTS payments;
+        DROP TABLE IF EXISTS leases;
+        DROP TABLE IF EXISTS properties;
+        DROP TABLE IF EXISTS tenants;
+        DROP TABLE IF EXISTS __drizzle_migrations;
+        PRAGMA foreign_keys = ON;
+      `);
+    }
   }
 
   // drizzle-kit migrations are the single source of truth for the schema.

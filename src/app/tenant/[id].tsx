@@ -2,10 +2,11 @@ import { useCallback, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Alert, Linking } from 'react-native';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/core';
-import { eq } from 'drizzle-orm';
+import { eq, and, isNull } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { tenants, leases, properties, payments } from '@/db/schema';
 import type { Tenant, Lease, Property, Payment } from '@/db/schema';
+import { softDeleteTenant } from '@/db/soft-delete';
 import {
   Screen, Card, Badge, Avatar, SectionTitle, Button, Field, Input,
   InfoRow, Divider, EmptyState, Loading, SheetModal, useTheme, spacing, radius,
@@ -32,23 +33,26 @@ export default function TenantDetailScreen() {
   async function loadData() {
     if (!id) return;
 
-    const [tn] = await db.select().from(tenants).where(eq(tenants.id, id)).limit(1);
+    const [tn] = await db.select().from(tenants)
+      .where(and(eq(tenants.id, id), isNull(tenants.deletedAt))).limit(1);
     if (!tn) { router.back(); return; }
     setTenant(tn);
 
-    const tLeases = await db.select().from(leases).where(eq(leases.tenantId, id));
+    const tLeases = await db.select().from(leases)
+      .where(and(eq(leases.tenantId, id), isNull(leases.deletedAt)));
     setHasAnyLease(tLeases.length > 0);
 
     const active = tLeases.find((l) => l.status === 'active') ?? null;
     setActiveLease(active);
 
-    const allProps = await db.select().from(properties);
+    const allProps = await db.select().from(properties).where(isNull(properties.deletedAt));
     const propName = (pid: string) => allProps.find((p) => p.id === pid)?.name ?? '—';
     setActiveProperty(active ? allProps.find((p) => p.id === active.propertyId) ?? null : null);
 
     const rows: PayRow[] = [];
     for (const lease of tLeases) {
-      const pays = await db.select().from(payments).where(eq(payments.leaseId, lease.id));
+      const pays = await db.select().from(payments)
+        .where(and(eq(payments.leaseId, lease.id), isNull(payments.deletedAt)));
       for (const payment of pays) {
         rows.push({ payment, currency: lease.currency as Currency, propertyName: propName(lease.propertyId) });
       }
@@ -81,10 +85,7 @@ export default function TenantDetailScreen() {
         text: 'Изтрий',
         style: 'destructive',
         onPress: async () => {
-          const tLeases = await db.select().from(leases).where(eq(leases.tenantId, tenant.id));
-          for (const lease of tLeases) await db.delete(payments).where(eq(payments.leaseId, lease.id));
-          await db.delete(leases).where(eq(leases.tenantId, tenant.id));
-          await db.delete(tenants).where(eq(tenants.id, tenant.id));
+          await softDeleteTenant(db, tenant.id);
           router.back();
         },
       },

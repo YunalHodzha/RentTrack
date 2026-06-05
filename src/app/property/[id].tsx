@@ -2,11 +2,12 @@ import { useCallback, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/core';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, isNull } from 'drizzle-orm';
 import { format } from 'date-fns';
 import { db } from '@/db/client';
 import { properties, leases, tenants, payments } from '@/db/schema';
 import type { Property, Lease, Tenant, Payment } from '@/db/schema';
+import { softDeleteProperty, softDeletePayment } from '@/db/soft-delete';
 import { generateId } from '@/lib/uuid';
 import { schedulePaymentReminders } from '@/services/notifications';
 import {
@@ -41,19 +42,22 @@ export default function PropertyDetailScreen() {
   async function loadData() {
     if (!id) return;
 
-    const [prop] = await db.select().from(properties).where(eq(properties.id, id)).limit(1);
+    const [prop] = await db.select().from(properties)
+      .where(and(eq(properties.id, id), isNull(properties.deletedAt))).limit(1);
     if (!prop) { router.back(); return; }
     setProperty(prop);
 
     const [lease] = await db.select().from(leases)
-      .where(and(eq(leases.propertyId, id), eq(leases.status, 'active')))
+      .where(and(eq(leases.propertyId, id), eq(leases.status, 'active'), isNull(leases.deletedAt)))
       .limit(1);
     setActiveLease(lease ?? null);
 
     if (lease) {
-      const [tenant] = await db.select().from(tenants).where(eq(tenants.id, lease.tenantId)).limit(1);
+      const [tenant] = await db.select().from(tenants)
+        .where(and(eq(tenants.id, lease.tenantId), isNull(tenants.deletedAt))).limit(1);
       setLeaseTenant(tenant ?? null);
-      const pays = await db.select().from(payments).where(eq(payments.leaseId, lease.id));
+      const pays = await db.select().from(payments)
+        .where(and(eq(payments.leaseId, lease.id), isNull(payments.deletedAt)));
       setPropertyPayments(pays.sort((a, b) => b.period.localeCompare(a.period)));
     } else {
       setLeaseTenant(null);
@@ -86,6 +90,7 @@ export default function PropertyDetailScreen() {
     const now = new Date().toISOString();
     const tenant: Tenant = {
       id: generateId(),
+      userId: null,
       name: data.name,
       phone: data.phone,
       email: null,
@@ -147,7 +152,7 @@ export default function PropertyDetailScreen() {
         text: 'Изтрий',
         style: 'destructive',
         onPress: async () => {
-          await db.delete(payments).where(eq(payments.id, payment.id));
+          await softDeletePayment(db, payment.id);
           await loadData();
           await schedulePaymentReminders();
           setPaymentModal(null);
@@ -181,10 +186,7 @@ export default function PropertyDetailScreen() {
         text: 'Изтрий',
         style: 'destructive',
         onPress: async () => {
-          const allLeases = await db.select().from(leases).where(eq(leases.propertyId, property.id));
-          for (const lease of allLeases) await db.delete(payments).where(eq(payments.leaseId, lease.id));
-          await db.delete(leases).where(eq(leases.propertyId, property.id));
-          await db.delete(properties).where(eq(properties.id, property.id));
+          await softDeleteProperty(db, property.id);
           router.back();
         },
       },
@@ -278,7 +280,7 @@ export default function PropertyDetailScreen() {
                 <Button
                   label="+ Добавяне на договор"
                   onPress={async () => {
-                    const rows = await db.select().from(tenants);
+                    const rows = await db.select().from(tenants).where(isNull(tenants.deletedAt));
                     setAllTenants(rows);
                     setAddLeaseVisible(true);
                   }}

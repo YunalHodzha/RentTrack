@@ -1,6 +1,6 @@
 # RentTrack — Статус на проекта
 
-> Последна актуализация: 2026-06-03
+> Последна актуализация: 2026-06-05
 
 ---
 
@@ -137,9 +137,37 @@
 - [x] **Динамично преплануване на известия** — известията се преплануват при изменение на настройките
 
 ### Phase 4 — Облак и многопотребителски режим
-- [ ] Supabase: вход с имейл/парола
-- [ ] Row-level security — данните на всеки потребител са изолирани
-- [ ] Офлайн режим с локален кеш и синхронизация
+
+#### Phase 4A — Локални основи за синхронизация ✅ (без мрежа)
+- [x] **`updatedAt` се обновява при всяка промяна** — `.$onUpdate()` на всичките 4 таблици в `schema.ts`, за да може sync двигателят да открива локално променени редове.
+- [x] **Мек delete (soft delete)** — изтриванията на имот/наемател/плащане вече задават `deletedAt` + `updatedAt` вместо твърд `db.delete`. Каскадно подпечатване: имот/наемател → договори → плащания (`src/db/soft-delete.ts`). Твърдото изтриване остава само в `export.ts` (import-replace = пълен reset).
+- [x] **Филтриране `isNull(deletedAt)`** добавено към всяка четяща заявка (екрани, services, store).
+- [x] **`userId` колона** (nullable засега) на всичките 4 таблици — собственост на ред за бъдещата RLS изолация; pre-auth локалните редове ще бъдат „осиновени" при първи вход.
+- [x] **Регенерирана миграция** — `drizzle/0001_pink_the_captain.sql` (ALTER TABLE ADD COLUMN user_id).
+- [x] **Destructive dev-drop branch** в `initDatabase()` е заключен зад `__DEV__`, за да не може да трие реални данни в production билд.
+- [x] **Тестове** за soft-delete каскада, филтрирането и `updatedAt`-on-update (`src/db/__tests__/soft-delete.test.ts`, in-memory better-sqlite3 + реалните миграции).
+
+#### Phase 4B — Supabase backend ✅ (код готов; изисква конфигурация)
+- [x] **Supabase схема** — `supabase/schema.sql`, огледало на `schema.ts` (uuid PK-та, TEXT timestamps за точен round-trip при LWW, `user_id` собственост, FK-и, partial unique).
+- [x] **RLS** на всичките 4 таблици с `auth.uid() = user_id` (select/insert/update; без delete политика — само soft delete).
+- [x] **`@supabase/supabase-js` клиент** — `src/services/supabase.ts`, чете `EXPO_PUBLIC_SUPABASE_URL` + `EXPO_PUBLIC_SUPABASE_ANON_KEY` от env; null когато не е конфигуриран; AsyncStorage сесия + auto-refresh.
+- [x] **Auth store** — `src/store/auth.ts` (възстановяване на сесия, signUp/signIn/signOut, `onAuthStateChange`).
+- [x] **Вход с имейл/парола + gating** — `src/components/auth-screen.tsx`; приложението е заключено зад вход в `_layout.tsx`; изход от „Настройки".
+- [x] **Допълнителна корекция (от soft delete):** `unique(lease_id, period)` → partial unique index `WHERE deleted_at IS NULL` (миграция `0002`), за да може период да се преизползва след мек delete.
+- [ ] **Изисква се от теб (не може да се автоматизира):** създай Supabase проект, пусни `supabase/schema.sql`, копирай `.env.example` → `.env` с твоите URL+anon key, и тествай вход на устройство/development build.
+- [ ] Претендиране на pre-auth локалните редове — преместено в Phase 4C (item 9).
+
+#### Phase 4C — Sync двигател ✅ (код готов)
+- [x] **Ядро на синхронизацията** — `src/services/sync.ts`: pull→push цикъл с LWW по `updatedAt`; pull-first, за да не презаписва blind upsert по-нов отдалечен ред; echo-free (вече приложените от сървъра редове не се връщат обратно). Seams `SyncRemote` + `CursorStore` за тестваемост.
+- [x] **Курсор** — единичен per-device high-water mark (`updatedAt`), namespaced по `userId` в AsyncStorage.
+- [x] **Soft-delete през sync** — tombstone-ите се разпространяват като обикновени редове (bump-нат `updatedAt` + `deletedAt`).
+- [x] **Claim** — при sync pre-auth локалните редове (`user_id IS NULL`) се присвояват на текущия потребител и се качват (item 11).
+- [x] **Runtime + тригери** — `src/services/sync-runtime.ts`: Supabase remote (upsert/select), mutex-нат `syncNow`, тригери при вход, foreground (AppState), периодичен интервал (60s) и reconnect (NetInfo). Офлайн опашката е имплицитна (курсорът не мърда при провал).
+- [x] **UI** — `src/store/sync.ts` (статус/version); таблата/списъците се презареждат при sync; раздел „Синхронизация" в Настройки с ръчен бутон + статус.
+- [x] **Тестове** — `src/services/__tests__/sync.test.ts`: push, pull, LWW (по-нов печели/по-стар не презаписва), tombstone, claim, echo-free, two-device разпространение (in-memory better-sqlite3 + fake remote).
+- [ ] **Изисква се от теб:** тествай реална синхронизация между две устройства/сесии след вход (кодът не може да се тества срещу жив Supabase без креденшъли в CI).
+
+> Забележка за clock skew: реконсилирането се доверява на часовниците на устройствата (LWW по `updatedAt`). Приемливо за личен app на NTP-синхронизирани телефони; при нужда — server-sequence курсор.
 
 ### Phase 5 — Публикуване
 - [ ] Google Play Developer акаунт ($25)

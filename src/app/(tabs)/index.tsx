@@ -3,28 +3,32 @@ import { View, Text, ScrollView } from 'react-native';
 import { useFocusEffect } from '@react-navigation/core';
 import { router } from 'expo-router';
 import { format } from 'date-fns';
+import { isNull } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { properties, leases, payments } from '@/db/schema';
 import { useAppStore } from '@/store';
+import { useSyncStore } from '@/store/sync';
 import { Header, Card, ProgressBar, Button, EmptyState, useTheme, spacing, radius, shadow } from '@/components/ui';
 import { formatMoney, formatPeriod, type Currency } from '@/lib/domain';
 
 export default function DashboardScreen() {
   const t = useTheme();
   const { properties: props, leases: leaseList, payments: payList, setProperties, setLeases, setPayments } = useAppStore();
+  const syncVersion = useSyncStore((s) => s.version);
 
   async function loadAll() {
     const [p, l, pay] = await Promise.all([
-      db.select().from(properties),
-      db.select().from(leases),
-      db.select().from(payments),
+      db.select().from(properties).where(isNull(properties.deletedAt)),
+      db.select().from(leases).where(isNull(leases.deletedAt)),
+      db.select().from(payments).where(isNull(payments.deletedAt)),
     ]);
     setProperties(p);
     setLeases(l);
     setPayments(pay);
   }
 
-  useFocusEffect(useCallback(() => { loadAll(); }, []));
+  // syncVersion in deps: reload when a background sync changes data while focused.
+  useFocusEffect(useCallback(() => { loadAll(); }, [syncVersion]));
 
   const currentPeriod = format(new Date(), 'yyyy-MM');
   const activeLeases = leaseList.filter((l) => l.status === 'active');

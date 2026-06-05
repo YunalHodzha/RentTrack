@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { properties, leases, payments } from '@/db/schema';
 import type { Property, Lease, Payment } from '@/db/schema';
@@ -70,9 +70,9 @@ function computeMonthlyReport(
 
 export async function generateMonthlyReport(period: string): Promise<MonthlyReport> {
   const [allLeases, allPayments, allProperties] = await Promise.all([
-    db.select().from(leases),
-    db.select().from(payments),
-    db.select().from(properties),
+    db.select().from(leases).where(isNull(leases.deletedAt)),
+    db.select().from(payments).where(isNull(payments.deletedAt)),
+    db.select().from(properties).where(isNull(properties.deletedAt)),
   ]);
   const propertyMap = new Map(allProperties.map((p) => [p.id, p]));
   return computeMonthlyReport(period, allLeases, allPayments, propertyMap);
@@ -81,9 +81,9 @@ export async function generateMonthlyReport(period: string): Promise<MonthlyRepo
 export async function generateYearlyReport(year: number): Promise<YearlyReport> {
   // Load all tables once, then compute all 12 months in memory.
   const [allLeases, allPayments, allProperties] = await Promise.all([
-    db.select().from(leases),
-    db.select().from(payments),
-    db.select().from(properties),
+    db.select().from(leases).where(isNull(leases.deletedAt)),
+    db.select().from(payments).where(isNull(payments.deletedAt)),
+    db.select().from(properties).where(isNull(properties.deletedAt)),
   ]);
   const propertyMap = new Map(allProperties.map((p) => [p.id, p]));
 
@@ -117,11 +117,13 @@ export async function generatePropertyReport(
   collected: number;
   status: string;
 }>> {
-  const [property] = await db.select().from(properties).where(eq(properties.id, propertyId));
+  const [property] = await db.select().from(properties)
+    .where(and(eq(properties.id, propertyId), isNull(properties.deletedAt)));
   if (!property) return [];
 
-  const propertyLeases = await db.select().from(leases).where(eq(leases.propertyId, propertyId));
-  const allPayments = await db.select().from(payments);
+  const propertyLeases = await db.select().from(leases)
+    .where(and(eq(leases.propertyId, propertyId), isNull(leases.deletedAt)));
+  const allPayments = await db.select().from(payments).where(isNull(payments.deletedAt));
 
   const months: string[] = [];
   const [startYear, startMonth] = startPeriod.split('-').map(Number);
