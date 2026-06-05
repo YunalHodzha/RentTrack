@@ -9,6 +9,11 @@ import { runSync, type CursorStore, type SyncRemote, type TableName } from '@/se
 
 const SYNC_INTERVAL_MS = 60_000;
 
+// Set once the first sync has claimed any pre-auth (null-userId) rows. Guards
+// claimLocalRows to run at most once per install, so a second account signing in
+// on the same device can't vacuum up leftover unowned rows.
+const PREAUTH_MIGRATED_KEY = 'renttrack_preauth_migrated';
+
 /** Real transport: upsert/select against Supabase (RLS scopes rows to the user). */
 const supabaseRemote: SyncRemote = {
   async push(table: TableName, rows) {
@@ -46,7 +51,10 @@ export async function syncNow(): Promise<void> {
   inFlight = true;
   useSyncStore.getState().markSyncing();
   try {
-    await runSync(db, supabaseRemote, cursorFor(userId), userId);
+    const alreadyMigrated = (await AsyncStorage.getItem(PREAUTH_MIGRATED_KEY)) === '1';
+    await runSync(db, supabaseRemote, cursorFor(userId), userId, { claimPreauth: !alreadyMigrated });
+    // Only after a successful run (so an offline failure retries the claim).
+    if (!alreadyMigrated) await AsyncStorage.setItem(PREAUTH_MIGRATED_KEY, '1');
     useSyncStore.getState().markSynced();
   } catch (e) {
     useSyncStore.getState().markError(e instanceof Error ? e.message : 'Неуспешна синхронизация');

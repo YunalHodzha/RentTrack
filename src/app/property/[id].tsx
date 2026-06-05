@@ -2,11 +2,12 @@ import { useCallback, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/core';
-import { eq, and, isNull } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { format } from 'date-fns';
 import { db } from '@/db/client';
 import { properties, leases, tenants, payments } from '@/db/schema';
 import type { Property, Lease, Tenant, Payment } from '@/db/schema';
+import { ownedAndLive, currentUserId, requireUserId, withOwner } from '@/db/owner';
 import { softDeleteProperty, softDeletePayment } from '@/db/soft-delete';
 import { generateId } from '@/lib/uuid';
 import { schedulePaymentReminders } from '@/services/notifications';
@@ -40,24 +41,25 @@ export default function PropertyDetailScreen() {
   const [editPropertyVisible, setEditPropertyVisible] = useState(false);
 
   async function loadData() {
-    if (!id) return;
+    const uid = currentUserId();
+    if (!id || !uid) return;
 
     const [prop] = await db.select().from(properties)
-      .where(and(eq(properties.id, id), isNull(properties.deletedAt))).limit(1);
+      .where(ownedAndLive(properties, uid, eq(properties.id, id))).limit(1);
     if (!prop) { router.back(); return; }
     setProperty(prop);
 
     const [lease] = await db.select().from(leases)
-      .where(and(eq(leases.propertyId, id), eq(leases.status, 'active'), isNull(leases.deletedAt)))
+      .where(ownedAndLive(leases, uid, eq(leases.propertyId, id), eq(leases.status, 'active')))
       .limit(1);
     setActiveLease(lease ?? null);
 
     if (lease) {
       const [tenant] = await db.select().from(tenants)
-        .where(and(eq(tenants.id, lease.tenantId), isNull(tenants.deletedAt))).limit(1);
+        .where(ownedAndLive(tenants, uid, eq(tenants.id, lease.tenantId))).limit(1);
       setLeaseTenant(tenant ?? null);
       const pays = await db.select().from(payments)
-        .where(and(eq(payments.leaseId, lease.id), isNull(payments.deletedAt)));
+        .where(ownedAndLive(payments, uid, eq(payments.leaseId, lease.id)));
       setPropertyPayments(pays.sort((a, b) => b.period.localeCompare(a.period)));
     } else {
       setLeaseTenant(null);
@@ -77,7 +79,7 @@ export default function PropertyDetailScreen() {
   }) {
     if (!property) return;
     const now = new Date().toISOString();
-    await db.insert(leases).values({ id: generateId(), propertyId: property.id, status: 'active', createdAt: now, updatedAt: now, ...data });
+    await db.insert(leases).values(withOwner({ id: generateId(), propertyId: property.id, status: 'active', createdAt: now, updatedAt: now, ...data }));
     await db.update(properties).set({ status: 'rented', updatedAt: now }).where(eq(properties.id, property.id));
     await loadData();
     setAddLeaseVisible(false);
@@ -90,7 +92,7 @@ export default function PropertyDetailScreen() {
     const now = new Date().toISOString();
     const tenant: Tenant = {
       id: generateId(),
-      userId: null,
+      userId: requireUserId(),
       name: data.name,
       phone: data.phone,
       email: null,
@@ -137,7 +139,7 @@ export default function PropertyDetailScreen() {
       // (collected totals, "current month" status, future reminders) stays correct.
       for (const data of rows) {
         const paidDate = data.status === 'paid' ? today : null;
-        await db.insert(payments).values({ id: generateId(), leaseId: activeLease.id, paidDate, createdAt: now, updatedAt: now, ...data });
+        await db.insert(payments).values(withOwner({ id: generateId(), leaseId: activeLease.id, paidDate, createdAt: now, updatedAt: now, ...data }));
       }
     }
     await loadData();
@@ -280,7 +282,9 @@ export default function PropertyDetailScreen() {
                 <Button
                   label="+ Добавяне на договор"
                   onPress={async () => {
-                    const rows = await db.select().from(tenants).where(isNull(tenants.deletedAt));
+                    const uid = currentUserId();
+                    if (!uid) return;
+                    const rows = await db.select().from(tenants).where(ownedAndLive(tenants, uid));
                     setAllTenants(rows);
                     setAddLeaseVisible(true);
                   }}

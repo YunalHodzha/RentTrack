@@ -7,9 +7,10 @@
 import type * as NotificationsModule from 'expo-notifications';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { router } from 'expo-router';
-import { eq, and, isNull } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { leases, payments } from '@/db/schema';
+import { ownedAndLive, currentUserId } from '@/db/owner';
 import { formatPeriod, addPeriodMonths, formatMoney, type Currency } from '@/lib/domain';
 import { useSettingsStore } from '@/store/settings';
 
@@ -85,9 +86,12 @@ export async function schedulePaymentReminders() {
   ensureHandler(Notifications);
   await Notifications.cancelAllScheduledNotificationsAsync();
 
+  const uid = currentUserId();
+  if (!uid) return;
+
   const notificationDaysBefore = useSettingsStore.getState().notificationDaysBefore;
   const activeLeases = await db.select().from(leases)
-    .where(and(eq(leases.status, 'active'), isNull(leases.deletedAt)));
+    .where(ownedAndLive(leases, uid, eq(leases.status, 'active')));
   const today = new Date();
   const currentPeriod = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
 
@@ -97,7 +101,7 @@ export async function schedulePaymentReminders() {
       const [existingPayment] = await db
         .select()
         .from(payments)
-        .where(and(eq(payments.leaseId, lease.id), eq(payments.period, period), isNull(payments.deletedAt)))
+        .where(ownedAndLive(payments, uid, eq(payments.leaseId, lease.id), eq(payments.period, period)))
         .limit(1);
 
       if (existingPayment?.status === 'paid') continue;

@@ -6,7 +6,8 @@ import { db } from '@/db/client';
 import { tenants, leases } from '@/db/schema';
 import { useAppStore } from '@/store';
 import { useSyncStore } from '@/store/sync';
-import { eq, and, isNull } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
+import { ownedAndLive, currentUserId, withOwner } from '@/db/owner';
 import type { NewTenant, Tenant } from '@/db/schema';
 import { generateId } from '@/lib/uuid';
 import {
@@ -22,9 +23,11 @@ export default function TenantsScreen() {
   const [modalVisible, setModalVisible] = useState(false);
 
   async function loadTenants() {
+    const uid = currentUserId();
+    if (!uid) { setTenants([]); setActiveIds(new Set()); return; }
     const [rows, activeLeases] = await Promise.all([
-      db.select().from(tenants).where(isNull(tenants.deletedAt)),
-      db.select().from(leases).where(and(eq(leases.status, 'active'), isNull(leases.deletedAt))),
+      db.select().from(tenants).where(ownedAndLive(tenants, uid)),
+      db.select().from(leases).where(ownedAndLive(leases, uid, eq(leases.status, 'active'))),
     ]);
     setTenants(rows);
     setActiveIds(new Set(activeLeases.map((l) => l.tenantId)));
@@ -33,7 +36,7 @@ export default function TenantsScreen() {
   useFocusEffect(useCallback(() => { loadTenants(); }, [syncVersion]));
 
   async function handleAdd(data: NewTenant) {
-    await db.insert(tenants).values(data);
+    await db.insert(tenants).values(withOwner(data));
     await loadTenants();
     setModalVisible(false);
   }

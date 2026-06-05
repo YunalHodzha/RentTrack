@@ -28,9 +28,7 @@ export default function RootLayout() {
     const initAuth = useAuthStore.getState().init;
     initDatabase()
       .then(() => loadSettings())
-      .then(() => markOverduePayments())
       .then(() => requestNotificationPermissions())
-      .then(() => schedulePaymentReminders())
       .then(() => initAuth())
       .then(() => setDbReady(true))
       .catch(console.error)
@@ -41,9 +39,12 @@ export default function RootLayout() {
 
   // Start sync once signed in; tear it down on sign-out. Keyed by user id so a
   // token refresh (new session object, same user) doesn't restart the triggers.
+  // Overdue-marking and reminder-scheduling are user-scoped, so they run here
+  // (once a user is known) rather than at pre-auth startup.
   const userId = session?.user?.id ?? null;
   useEffect(() => {
     if (!ready || !userId) return;
+    void markOverduePayments(userId).then(() => schedulePaymentReminders());
     return setupSyncTriggers();
   }, [ready, userId]);
 

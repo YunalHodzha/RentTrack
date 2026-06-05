@@ -3,9 +3,9 @@ import { View, Text, ScrollView } from 'react-native';
 import { useFocusEffect } from '@react-navigation/core';
 import { router } from 'expo-router';
 import { format } from 'date-fns';
-import { isNull } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { properties, leases, payments } from '@/db/schema';
+import { ownedAndLive, currentUserId } from '@/db/owner';
 import { useAppStore } from '@/store';
 import { useSyncStore } from '@/store/sync';
 import { Header, Card, ProgressBar, Button, EmptyState, useTheme, spacing, radius, shadow } from '@/components/ui';
@@ -17,10 +17,12 @@ export default function DashboardScreen() {
   const syncVersion = useSyncStore((s) => s.version);
 
   async function loadAll() {
+    const uid = currentUserId();
+    if (!uid) { setProperties([]); setLeases([]); setPayments([]); return; }
     const [p, l, pay] = await Promise.all([
-      db.select().from(properties).where(isNull(properties.deletedAt)),
-      db.select().from(leases).where(isNull(leases.deletedAt)),
-      db.select().from(payments).where(isNull(payments.deletedAt)),
+      db.select().from(properties).where(ownedAndLive(properties, uid)),
+      db.select().from(leases).where(ownedAndLive(leases, uid)),
+      db.select().from(payments).where(ownedAndLive(payments, uid)),
     ]);
     setProperties(p);
     setLeases(l);

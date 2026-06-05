@@ -81,9 +81,14 @@ function snakeToCamel(obj: RemoteRow): Record<string, unknown> {
 }
 
 /**
- * Claim pre-auth local rows for the signed-in user (idempotent: only rows with a
- * null user_id are touched). Setting user_id bumps updated_at via $onUpdate, so
+ * Claim pre-auth local rows for the signed-in user (only rows with a null
+ * user_id are touched). Setting user_id bumps updated_at via $onUpdate, so
  * claimed rows are picked up by the very next push.
+ *
+ * This must run AT MOST ONCE per install (gated by the caller via the
+ * `claimPreauth` option). Once inserts stamp user_id, the only null-userId rows
+ * are legacy pre-auth data; re-running on a later sign-in would let a second
+ * account vacuum up the first account's leftover null rows.
  */
 async function claimLocalRows(db: AppDatabase, userId: string) {
   await db.update(properties).set({ userId }).where(isNull(properties.userId));
@@ -160,8 +165,14 @@ export async function runSync(
   remote: SyncRemote,
   cursor: CursorStore,
   userId: string,
+  options: { claimPreauth?: boolean } = {},
 ): Promise<SyncResult> {
-  await claimLocalRows(db, userId);
+  // Claim pre-auth rows only on the first-ever sync of an install (see
+  // claimLocalRows). The runtime gates this with a persisted flag; defaults to
+  // true so unit tests exercise the claim path.
+  if (options.claimPreauth ?? true) {
+    await claimLocalRows(db, userId);
+  }
 
   const since = await cursor.get();
   let maxSeen = since;

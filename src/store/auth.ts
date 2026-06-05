@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/services/supabase';
+import { useAppStore } from '@/store';
 
 interface AuthStore {
   session: Session | null;
@@ -56,5 +57,9 @@ export const useAuthStore = create<AuthStore>((set) => ({
     if (!supabase) return;
     await supabase.auth.signOut();
     set({ session: null, user: null });
+    // Clear the previous user's cached rows so they don't linger in the UI when
+    // a different account signs in on this device (local DB rows stay, but are
+    // now hidden by the per-user read filter).
+    useAppStore.getState().reset();
   },
 }));

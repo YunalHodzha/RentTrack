@@ -1,7 +1,7 @@
-import { isNull } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { properties, leases, tenants, payments } from '@/db/schema';
 import type { Property, Lease, Tenant, Payment } from '@/db/schema';
+import { ownedAndLive, currentUserId } from '@/db/owner';
 
 export interface ExportData {
   exportDate: string;
@@ -12,11 +12,15 @@ export interface ExportData {
 }
 
 export async function exportDataAsJSON(): Promise<ExportData> {
+  const uid = currentUserId();
+  if (!uid) {
+    return { exportDate: new Date().toISOString(), properties: [], tenants: [], leases: [], payments: [] };
+  }
   const [propsData, tenantsData, leasesData, paymentsData] = await Promise.all([
-    db.select().from(properties).where(isNull(properties.deletedAt)),
-    db.select().from(tenants).where(isNull(tenants.deletedAt)),
-    db.select().from(leases).where(isNull(leases.deletedAt)),
-    db.select().from(payments).where(isNull(payments.deletedAt)),
+    db.select().from(properties).where(ownedAndLive(properties, uid)),
+    db.select().from(tenants).where(ownedAndLive(tenants, uid)),
+    db.select().from(leases).where(ownedAndLive(leases, uid)),
+    db.select().from(payments).where(ownedAndLive(payments, uid)),
   ]);
 
   return {
@@ -29,12 +33,15 @@ export async function exportDataAsJSON(): Promise<ExportData> {
 }
 
 export async function exportDataAsCSV(): Promise<string> {
-  const [propsData, tenantsData, leasesData, paymentsData] = await Promise.all([
-    db.select().from(properties).where(isNull(properties.deletedAt)),
-    db.select().from(tenants).where(isNull(tenants.deletedAt)),
-    db.select().from(leases).where(isNull(leases.deletedAt)),
-    db.select().from(payments).where(isNull(payments.deletedAt)),
-  ]);
+  const uid = currentUserId();
+  const [propsData, tenantsData, leasesData, paymentsData] = uid
+    ? await Promise.all([
+        db.select().from(properties).where(ownedAndLive(properties, uid)),
+        db.select().from(tenants).where(ownedAndLive(tenants, uid)),
+        db.select().from(leases).where(ownedAndLive(leases, uid)),
+        db.select().from(payments).where(ownedAndLive(payments, uid)),
+      ])
+    : [[], [], [], []] as [Property[], Tenant[], Lease[], Payment[]];
 
   const escapeCSV = (val: string | number | null | undefined): string => {
     if (val === null || val === undefined) return '';

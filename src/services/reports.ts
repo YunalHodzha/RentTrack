@@ -1,7 +1,8 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { properties, leases, payments } from '@/db/schema';
 import type { Property, Lease, Payment } from '@/db/schema';
+import { ownedAndLive, currentUserId } from '@/db/owner';
 
 export interface MonthlyReport {
   period: string;
@@ -69,21 +70,25 @@ function computeMonthlyReport(
 }
 
 export async function generateMonthlyReport(period: string): Promise<MonthlyReport> {
+  const uid = currentUserId();
+  if (!uid) return { period, income: 0, collected: 0, outstanding: 0, propertyBreakdown: [] };
   const [allLeases, allPayments, allProperties] = await Promise.all([
-    db.select().from(leases).where(isNull(leases.deletedAt)),
-    db.select().from(payments).where(isNull(payments.deletedAt)),
-    db.select().from(properties).where(isNull(properties.deletedAt)),
+    db.select().from(leases).where(ownedAndLive(leases, uid)),
+    db.select().from(payments).where(ownedAndLive(payments, uid)),
+    db.select().from(properties).where(ownedAndLive(properties, uid)),
   ]);
   const propertyMap = new Map(allProperties.map((p) => [p.id, p]));
   return computeMonthlyReport(period, allLeases, allPayments, propertyMap);
 }
 
 export async function generateYearlyReport(year: number): Promise<YearlyReport> {
+  const uid = currentUserId();
+  if (!uid) return { year, months: [], totalIncome: 0, totalCollected: 0, totalOutstanding: 0 };
   // Load all tables once, then compute all 12 months in memory.
   const [allLeases, allPayments, allProperties] = await Promise.all([
-    db.select().from(leases).where(isNull(leases.deletedAt)),
-    db.select().from(payments).where(isNull(payments.deletedAt)),
-    db.select().from(properties).where(isNull(properties.deletedAt)),
+    db.select().from(leases).where(ownedAndLive(leases, uid)),
+    db.select().from(payments).where(ownedAndLive(payments, uid)),
+    db.select().from(properties).where(ownedAndLive(properties, uid)),
   ]);
   const propertyMap = new Map(allProperties.map((p) => [p.id, p]));
 
@@ -117,13 +122,16 @@ export async function generatePropertyReport(
   collected: number;
   status: string;
 }>> {
+  const uid = currentUserId();
+  if (!uid) return [];
+
   const [property] = await db.select().from(properties)
-    .where(and(eq(properties.id, propertyId), isNull(properties.deletedAt)));
+    .where(ownedAndLive(properties, uid, eq(properties.id, propertyId)));
   if (!property) return [];
 
   const propertyLeases = await db.select().from(leases)
-    .where(and(eq(leases.propertyId, propertyId), isNull(leases.deletedAt)));
-  const allPayments = await db.select().from(payments).where(isNull(payments.deletedAt));
+    .where(ownedAndLive(leases, uid, eq(leases.propertyId, propertyId)));
+  const allPayments = await db.select().from(payments).where(ownedAndLive(payments, uid));
 
   const months: string[] = [];
   const [startYear, startMonth] = startPeriod.split('-').map(Number);
