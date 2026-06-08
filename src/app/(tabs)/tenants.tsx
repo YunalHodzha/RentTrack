@@ -26,6 +26,7 @@ export default function TenantsScreen() {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [query, setQuery] = useState('');
 
   const loadTenants = useCallback(async () => {
     const uid = currentUserId();
@@ -73,6 +74,12 @@ export default function TenantsScreen() {
     }
   }
 
+  // Клиентско търсене по име/телефон над заредения списък (моментално).
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? list.filter((tn) => `${tn.name} ${tn.phone ?? ''}`.toLowerCase().includes(q))
+    : list;
+
   const renderItem = ({ item }: { item: Tenant }) => (
     <Card onPress={() => router.push(`/tenant/${item.id}`)} style={{ marginBottom: spacing.md }}>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -96,24 +103,38 @@ export default function TenantsScreen() {
       ) : phase === 'skeleton' ? (
         <ListSkeleton />
       ) : phase === 'pending' ? null : (
-        <FlatList
-          data={list}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={renderItem}
-          contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: 120 }}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={t.primary} colors={[t.primary]} />
-          }
-          ListEmptyComponent={
-            <EmptyState
-              icon="👥"
-              title="Все още няма наематели"
-              message="Добавете първия си наемател, за да започнете."
-              action={<Button label="Добави наемател" onPress={() => setModalVisible(true)} />}
-            />
-          }
-        />
+        <View style={{ flex: 1 }}>
+          {list.length > 0 ? (
+            <View style={{ paddingHorizontal: spacing.xl, paddingBottom: spacing.md }}>
+              <Input value={query} onChangeText={setQuery} placeholder="Търсене по име или телефон" autoCapitalize="none" />
+            </View>
+          ) : null}
+          <FlatList
+            style={{ flex: 1 }}
+            data={filtered}
+            keyExtractor={(item) => String(item.id)}
+            renderItem={renderItem}
+            contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: 120 }}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={t.primary} colors={[t.primary]} />
+            }
+            ListEmptyComponent={
+              list.length === 0 ? (
+                <EmptyState
+                  icon="👥"
+                  title="Все още няма наематели"
+                  message="Добавете първия си наемател, за да започнете."
+                  action={<Button label="Добави наемател" onPress={() => setModalVisible(true)} />}
+                />
+              ) : (
+                <EmptyState icon="🔍" title="Няма съвпадения" message="Опитайте друго търсене." />
+              )
+            }
+          />
+        </View>
       )}
 
       <FAB onPress={() => setModalVisible(true)} />

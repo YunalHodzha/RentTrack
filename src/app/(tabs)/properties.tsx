@@ -25,6 +25,9 @@ export default function PropertiesScreen() {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | Property['status']>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | Property['type']>('all');
 
   const loadProperties = useCallback(async () => {
     const uid = currentUserId();
@@ -71,6 +74,16 @@ export default function PropertiesScreen() {
     }
   }
 
+  // Клиентско филтриране над вече заредения списък (данните са малко → без
+  // дебаунс/useMemo, моментално е).
+  const q = query.trim().toLowerCase();
+  const filtered = list.filter((p) => {
+    if (statusFilter !== 'all' && p.status !== statusFilter) return false;
+    if (typeFilter !== 'all' && p.type !== typeFilter) return false;
+    if (q && !`${p.name} ${p.address ?? ''}`.toLowerCase().includes(q)) return false;
+    return true;
+  });
+
   const renderItem = ({ item }: { item: Property }) => (
     <Card onPress={() => router.push(`/property/${item.id}`)} style={{ marginBottom: spacing.md }}>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -94,30 +107,73 @@ export default function PropertiesScreen() {
       ) : phase === 'skeleton' ? (
         <ListSkeleton />
       ) : phase === 'pending' ? null : (
-        <FlatList
-          data={list}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={renderItem}
-          contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: 120 }}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={t.primary} colors={[t.primary]} />
-          }
-          ListEmptyComponent={
-            <EmptyState
-              icon="🏠"
-              title="Все още няма имоти"
-              message="Добавете първия си имот, за да започнете."
-              action={<Button label="Добави имот" onPress={() => setModalVisible(true)} />}
+        <View style={{ flex: 1 }}>
+          {list.length > 0 ? (
+            <PropertyFilters
+              query={query} onQuery={setQuery}
+              status={statusFilter} onStatus={setStatusFilter}
+              type={typeFilter} onType={setTypeFilter}
             />
-          }
-        />
+          ) : null}
+          <FlatList
+            style={{ flex: 1 }}
+            data={filtered}
+            keyExtractor={(item) => String(item.id)}
+            renderItem={renderItem}
+            contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: 120 }}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={t.primary} colors={[t.primary]} />
+            }
+            ListEmptyComponent={
+              list.length === 0 ? (
+                <EmptyState
+                  icon="🏠"
+                  title="Все още няма имоти"
+                  message="Добавете първия си имот, за да започнете."
+                  action={<Button label="Добави имот" onPress={() => setModalVisible(true)} />}
+                />
+              ) : (
+                <EmptyState icon="🔍" title="Няма съвпадения" message="Опитайте друго търсене или променете филтрите." />
+              )
+            }
+          />
+        </View>
       )}
 
       <FAB onPress={() => setModalVisible(true)} />
 
       <AddPropertyModal visible={modalVisible} onClose={() => setModalVisible(false)} onSave={handleAdd} />
     </Screen>
+  );
+}
+
+function PropertyFilters({ query, onQuery, status, onStatus, type, onType }: {
+  query: string;
+  onQuery: (v: string) => void;
+  status: 'all' | Property['status'];
+  onStatus: (v: 'all' | Property['status']) => void;
+  type: 'all' | Property['type'];
+  onType: (v: 'all' | Property['type']) => void;
+}) {
+  const statusOptions: { value: 'all' | Property['status']; label: string }[] = [
+    { value: 'all', label: 'Всички' },
+    { value: 'free', label: STATUS_LABELS.free },
+    { value: 'rented', label: STATUS_LABELS.rented },
+    { value: 'unavailable', label: STATUS_LABELS.unavailable },
+  ];
+  const typeOptions: { value: 'all' | Property['type']; label: string }[] = [
+    { value: 'all', label: 'Всички' },
+    ...PROPERTY_TYPES.map((v) => ({ value: v, label: TYPE_LABELS[v] })),
+  ];
+  return (
+    <View style={{ paddingHorizontal: spacing.xl, paddingBottom: spacing.md, gap: spacing.md }}>
+      <Input value={query} onChangeText={onQuery} placeholder="Търсене по име или адрес" autoCapitalize="none" />
+      <ChipGroup options={statusOptions} value={status} onChange={onStatus} />
+      <ChipGroup options={typeOptions} value={type} onChange={onType} />
+    </View>
   );
 }
 
