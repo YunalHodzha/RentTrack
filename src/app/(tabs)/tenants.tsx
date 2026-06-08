@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { db } from '@/db/client';
 import { tenants, leases } from '@/db/schema';
 import { useAppStore } from '@/store';
+import { toast } from '@/store/toast';
 import { useFocusReload } from '@/hooks/use-focus-reload';
 import { eq } from 'drizzle-orm';
 import { ownedAndLive, currentUserId, withOwner } from '@/db/owner';
@@ -34,9 +35,15 @@ export default function TenantsScreen() {
   useFocusReload(loadTenants);
 
   async function handleAdd(data: NewTenant) {
-    await db.insert(tenants).values(withOwner(data));
-    await loadTenants();
-    setModalVisible(false);
+    try {
+      await db.insert(tenants).values(withOwner(data));
+      await loadTenants();
+      toast.success('Наемателят е добавен');
+    } catch {
+      toast.error('Неуспешно добавяне на наемателя');
+    } finally {
+      setModalVisible(false);
+    }
   }
 
   const renderItem = ({ item }: { item: Tenant }) => (

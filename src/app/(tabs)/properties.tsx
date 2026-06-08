@@ -5,6 +5,7 @@ import { db } from '@/db/client';
 import { properties } from '@/db/schema';
 import { ownedAndLive, currentUserId, withOwner } from '@/db/owner';
 import { useAppStore } from '@/store';
+import { toast } from '@/store/toast';
 import { useFocusReload } from '@/hooks/use-focus-reload';
 import type { NewProperty, Property } from '@/db/schema';
 import { generateId } from '@/lib/uuid';
@@ -29,9 +30,17 @@ export default function PropertiesScreen() {
   useFocusReload(loadProperties);
 
   async function handleAdd(data: NewProperty) {
-    await db.insert(properties).values(withOwner(data));
-    await loadProperties();
-    setModalVisible(false);
+    // Затваряме модала и в двата случая (RN Modal крие toast-а отдолу), за да е
+    // видима обратната връзка на екрана под него.
+    try {
+      await db.insert(properties).values(withOwner(data));
+      await loadProperties();
+      toast.success('Имотът е добавен');
+    } catch {
+      toast.error('Неуспешно добавяне на имота');
+    } finally {
+      setModalVisible(false);
+    }
   }
 
   const renderItem = ({ item }: { item: Property }) => (
