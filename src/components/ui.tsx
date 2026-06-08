@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView, Modal,
-  KeyboardAvoidingView, Platform, ActivityIndicator,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Animated,
   type ViewStyle, type TextStyle, type TextInputProps, type StyleProp,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, toneColors, spacing, radius, shadow, type Theme, type Tone } from '@/theme';
+import { useToastStore, type ToastItem, type ToastType } from '@/store/toast';
 
 /* ------------------------------------------------------------------ *
  * Layout
@@ -392,6 +393,103 @@ export function SheetModal({
         </KeyboardAvoidingView>
       </View>
     </Modal>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Toast / snackbar — единна обратна връзка.
+ *
+ * `ToastHost` се монтира веднъж в root layout-а и слуша toast store-а.
+ * Стои абсолютно позициониран най-отгоре (под status bar-а, със safe-area
+ * отстъп) и не блокира докосванията под себе си (`box-none`). Цветовете идват
+ * от темата, така че се спазва dark/light.
+ *
+ * Забележка: RN `Modal` се рендира над root-а, затова toast от тук НЕ се вижда
+ * над отворен `SheetModal`. Затова резултатните toast-ове се показват след
+ * затваряне на модала, а валидацията вътре в модал остава inline.
+ * ------------------------------------------------------------------ */
+
+/** Колко да стои на екрана според важността (грешките — малко по-дълго). */
+const TOAST_DURATION: Record<ToastType, number> = { success: 3000, info: 3500, error: 4500 };
+
+function toastAccent(t: Theme, type: ToastType): string {
+  if (type === 'success') return t.success;
+  if (type === 'error') return t.danger;
+  return t.primary;
+}
+
+function ToastView({ item, onDismiss }: { item: ToastItem; onDismiss: (id: number) => void }) {
+  const t = useTheme();
+  const accent = toastAccent(t, item.type);
+  const anim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(anim, { toValue: 1, duration: 220, useNativeDriver: true }).start();
+    const timer = setTimeout(() => {
+      Animated.timing(anim, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => onDismiss(item.id));
+    }, TOAST_DURATION[item.type]);
+    return () => clearTimeout(timer);
+  }, [anim, item.id, item.type, onDismiss]);
+
+  function handlePress() {
+    Animated.timing(anim, { toValue: 0, duration: 150, useNativeDriver: true }).start(() => onDismiss(item.id));
+  }
+
+  return (
+    <Animated.View
+      style={{
+        opacity: anim,
+        transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [-12, 0] }) }],
+      }}>
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={handlePress}
+        accessibilityRole="alert"
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: spacing.md,
+          backgroundColor: t.card,
+          borderRadius: radius.md,
+          borderWidth: 1,
+          borderColor: t.border,
+          borderLeftWidth: 4,
+          borderLeftColor: accent,
+          paddingVertical: 13,
+          paddingHorizontal: spacing.lg,
+          ...shadow.md,
+          shadowColor: t.shadowColor,
+        }}>
+        <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: accent }} />
+        <Text style={{ flex: 1, fontSize: 14, fontWeight: '600', color: t.text, lineHeight: 19 }}>
+          {item.message}
+        </Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+/** Mount once near the app root (inside the SafeAreaProvider). */
+export function ToastHost() {
+  const toasts = useToastStore((s) => s.toasts);
+  const dismiss = useToastStore((s) => s.dismiss);
+  const insets = useSafeAreaInsets();
+
+  if (toasts.length === 0) return null;
+  return (
+    <View
+      pointerEvents="box-none"
+      style={{
+        position: 'absolute',
+        top: insets.top + spacing.sm,
+        left: spacing.lg,
+        right: spacing.lg,
+        gap: spacing.sm,
+      }}>
+      {toasts.map((item) => (
+        <ToastView key={item.id} item={item} onDismiss={dismiss} />
+      ))}
+    </View>
   );
 }
 

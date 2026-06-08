@@ -11,7 +11,7 @@ import { requestNotificationPermissions, schedulePaymentReminders, setupNotifica
 import { useSettingsStore } from '@/store/settings';
 import { useAuthStore } from '@/store/auth';
 import { setupSyncTriggers } from '@/services/sync-runtime';
-import { Loading } from '@/components/ui';
+import { Loading, ToastHost } from '@/components/ui';
 import { AuthScreen } from '@/components/auth-screen';
 import { useTheme } from '@/theme';
 
@@ -68,6 +68,8 @@ export default function RootLayout() {
             <Stack.Screen name="reports" options={{ headerShown: true, title: 'Справки' }} />
           </Stack>
         )}
+        {/* Над всичко (вкл. auth екрана) — единната обратна връзка. */}
+        <ToastHost />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
