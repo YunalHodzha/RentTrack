@@ -2,8 +2,9 @@ import { useCallback, useState } from 'react';
 import { View, Text, ScrollView } from 'react-native';
 import { Stack } from 'expo-router';
 import {
-  Screen, Card, SectionTitle, Button, useTheme, spacing, toneColors,
+  Screen, Card, SectionTitle, Button, Skeleton, ErrorState, useTheme, spacing, radius, toneColors,
 } from '@/components/ui';
+import { useDelayedFlag } from '@/hooks/use-loading-state';
 import { formatMoney, formatPeriod } from '@/lib/domain';
 import { generateMonthlyReport, generateYearlyReport, type MonthlyReport, type YearlyReport } from '@/services/reports';
 
@@ -14,17 +15,19 @@ export default function ReportsScreen() {
   const [month, setMonth] = useState(`${year}-${String(new Date().getMonth() + 1).padStart(2, '0')}`);
   const [yearlyData, setYearlyData] = useState<YearlyReport | null>(null);
   const [monthlyData, setMonthlyData] = useState<MonthlyReport | null>(null);
-  // Скелетоните/спинърите за зареждане идват в следваща част на 4.5.3; засега
-  // пазим само сетъра, за да остане scaffold-ингът на място.
-  const [, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const showLoading = useDelayedFlag(loading);
 
   const loadYearlyReport = useCallback(async () => {
     setLoading(true);
+    setError(false);
     try {
       const data = await generateYearlyReport(year);
       setYearlyData(data);
-    } catch (error) {
-      console.error('Error loading yearly report:', error);
+    } catch (e) {
+      console.error('Error loading yearly report:', e);
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -32,11 +35,13 @@ export default function ReportsScreen() {
 
   const loadMonthlyReport = useCallback(async () => {
     setLoading(true);
+    setError(false);
     try {
       const data = await generateMonthlyReport(month);
       setMonthlyData(data);
-    } catch (error) {
-      console.error('Error loading monthly report:', error);
+    } catch (e) {
+      console.error('Error loading monthly report:', e);
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -61,13 +66,13 @@ export default function ReportsScreen() {
             <Button
               label="Годишно"
               variant={view === 'yearly' ? 'primary' : 'secondary'}
-              onPress={() => setView('yearly')}
+              onPress={() => { setView('yearly'); setError(false); }}
               fullWidth
             />
             <Button
               label="Месечно"
               variant={view === 'monthly' ? 'primary' : 'secondary'}
-              onPress={() => setView('monthly')}
+              onPress={() => { setView('monthly'); setError(false); }}
               fullWidth
             />
           </View>
@@ -95,7 +100,11 @@ export default function ReportsScreen() {
 
               <Button label="Зареди справка" onPress={loadYearlyReport} fullWidth style={{ marginBottom: spacing.lg }} />
 
-              {yearlyData && (
+              {error ? (
+                <ErrorState message="Справката не можа да се зареди." onRetry={loadYearlyReport} />
+              ) : showLoading ? (
+                <ReportSkeleton />
+              ) : yearlyData ? (
                 <>
                   <SectionTitle>Годишно резюме {year}</SectionTitle>
                   <Card style={{ marginBottom: spacing.lg }}>
@@ -123,7 +132,7 @@ export default function ReportsScreen() {
                     </Card>
                   ))}
                 </>
-              )}
+              ) : null}
             </>
           ) : (
             <>
@@ -158,7 +167,11 @@ export default function ReportsScreen() {
 
               <Button label="Зареди справка" onPress={loadMonthlyReport} fullWidth style={{ marginBottom: spacing.lg }} />
 
-              {monthlyData && (
+              {error ? (
+                <ErrorState message="Справката не можа да се зареди." onRetry={loadMonthlyReport} />
+              ) : showLoading ? (
+                <ReportSkeleton />
+              ) : monthlyData ? (
                 <>
                   <SectionTitle>Месечно резюме</SectionTitle>
                   <Card style={{ marginBottom: spacing.lg }}>
@@ -181,12 +194,22 @@ export default function ReportsScreen() {
                     </Card>
                   ))}
                 </>
-              )}
+              ) : null}
             </>
           )}
         </ScrollView>
       </Screen>
     </>
+  );
+}
+
+function ReportSkeleton() {
+  return (
+    <View style={{ gap: spacing.md }}>
+      <Skeleton height={96} style={{ borderRadius: radius.lg }} />
+      <Skeleton height={64} style={{ borderRadius: radius.lg }} />
+      <Skeleton height={64} style={{ borderRadius: radius.lg }} />
+    </View>
   );
 }
 
