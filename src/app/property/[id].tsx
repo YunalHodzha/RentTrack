@@ -10,6 +10,7 @@ import type { Property, Lease, Tenant, Payment } from '@/db/schema';
 import { ownedAndLive, currentUserId, requireUserId, withOwner } from '@/db/owner';
 import { softDeleteProperty, softDeletePayment } from '@/db/soft-delete';
 import { generateId } from '@/lib/uuid';
+import { toast } from '@/store/toast';
 import { schedulePaymentReminders } from '@/services/notifications';
 import {
   Screen, Card, Badge, IconBadge, SectionTitle, Button, Field, Input, ChipGroup,
@@ -78,11 +79,17 @@ export default function PropertyDetailScreen() {
     paymentDay: number; startDate: string; depositAmount: number | null; notes: string | null;
   }) {
     if (!property) return;
-    const now = new Date().toISOString();
-    await db.insert(leases).values(withOwner({ id: generateId(), propertyId: property.id, status: 'active', createdAt: now, updatedAt: now, ...data }));
-    await db.update(properties).set({ status: 'rented', updatedAt: now }).where(eq(properties.id, property.id));
-    await loadData();
-    setAddLeaseVisible(false);
+    try {
+      const now = new Date().toISOString();
+      await db.insert(leases).values(withOwner({ id: generateId(), propertyId: property.id, status: 'active', createdAt: now, updatedAt: now, ...data }));
+      await db.update(properties).set({ status: 'rented', updatedAt: now }).where(eq(properties.id, property.id));
+      await loadData();
+      toast.success('Договорът е създаден');
+    } catch {
+      toast.error('Неуспешно създаване на договора');
+    } finally {
+      setAddLeaseVisible(false);
+    }
   }
 
   // Create a tenant inline from the lease modal. Persists to the DB (so it also
@@ -114,11 +121,16 @@ export default function PropertyDetailScreen() {
         text: 'Приключи',
         style: 'destructive',
         onPress: async () => {
-          const today = new Date().toISOString().split('T')[0];
-          const now = new Date().toISOString();
-          await db.update(leases).set({ status: 'ended', endDate: today, updatedAt: now }).where(eq(leases.id, activeLease.id));
-          await db.update(properties).set({ status: 'free', updatedAt: now }).where(eq(properties.id, property.id));
-          await loadData();
+          try {
+            const today = new Date().toISOString().split('T')[0];
+            const now = new Date().toISOString();
+            await db.update(leases).set({ status: 'ended', endDate: today, updatedAt: now }).where(eq(leases.id, activeLease.id));
+            await db.update(properties).set({ status: 'free', updatedAt: now }).where(eq(properties.id, property.id));
+            await loadData();
+            toast.success('Договорът е приключен');
+          } catch {
+            toast.error('Неуспешно приключване на договора');
+          }
         },
       },
     ]);
@@ -126,25 +138,32 @@ export default function PropertyDetailScreen() {
 
   async function handleSavePayment(rows: PaymentInput[]) {
     if (!activeLease || !paymentModal) return;
-    const today = new Date().toISOString().split('T')[0];
-    const now = new Date().toISOString();
+    const isEdit = paymentModal.mode === 'edit' && !!paymentModal.payment;
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const now = new Date().toISOString();
 
-    if (paymentModal.mode === 'edit' && paymentModal.payment) {
-      const prev = paymentModal.payment;
-      const data = rows[0];
-      const paidDate = data.status === 'paid' ? (prev.paidDate ?? today) : prev.paidDate ?? null;
-      await db.update(payments).set({ ...data, paidDate, updatedAt: now }).where(eq(payments.id, prev.id));
-    } else {
-      // Advance payment: one paid row per covered month so per-period logic
-      // (collected totals, "current month" status, future reminders) stays correct.
-      for (const data of rows) {
-        const paidDate = data.status === 'paid' ? today : null;
-        await db.insert(payments).values(withOwner({ id: generateId(), leaseId: activeLease.id, paidDate, createdAt: now, updatedAt: now, ...data }));
+      if (paymentModal.mode === 'edit' && paymentModal.payment) {
+        const prev = paymentModal.payment;
+        const data = rows[0];
+        const paidDate = data.status === 'paid' ? (prev.paidDate ?? today) : prev.paidDate ?? null;
+        await db.update(payments).set({ ...data, paidDate, updatedAt: now }).where(eq(payments.id, prev.id));
+      } else {
+        // Advance payment: one paid row per covered month so per-period logic
+        // (collected totals, "current month" status, future reminders) stays correct.
+        for (const data of rows) {
+          const paidDate = data.status === 'paid' ? today : null;
+          await db.insert(payments).values(withOwner({ id: generateId(), leaseId: activeLease.id, paidDate, createdAt: now, updatedAt: now, ...data }));
+        }
       }
+      await loadData();
+      await schedulePaymentReminders();
+      toast.success(isEdit ? 'Плащането е обновено' : rows.length > 1 ? 'Плащанията са записани' : 'Плащането е записано');
+    } catch {
+      toast.error('Неуспешно записване на плащането');
+    } finally {
+      setPaymentModal(null);
     }
-    await loadData();
-    await schedulePaymentReminders();
-    setPaymentModal(null);
   }
 
   function handleDeletePayment(payment: Payment) {
@@ -154,10 +173,16 @@ export default function PropertyDetailScreen() {
         text: 'Изтрий',
         style: 'destructive',
         onPress: async () => {
-          await softDeletePayment(db, payment.id);
-          await loadData();
-          await schedulePaymentReminders();
-          setPaymentModal(null);
+          try {
+            await softDeletePayment(db, payment.id);
+            await loadData();
+            await schedulePaymentReminders();
+            toast.success('Плащането е изтрито');
+          } catch {
+            toast.error('Неуспешно изтриване на плащането');
+          } finally {
+            setPaymentModal(null);
+          }
         },
       },
     ]);
@@ -165,21 +190,32 @@ export default function PropertyDetailScreen() {
 
   async function handleEditProperty(data: { name: string; address: string | null; type: Property['type']; notes: string | null }) {
     if (!property) return;
-    await db.update(properties).set(data).where(eq(properties.id, property.id));
-    await loadData();
-    setEditPropertyVisible(false);
+    try {
+      await db.update(properties).set(data).where(eq(properties.id, property.id));
+      await loadData();
+      toast.success('Имотът е обновен');
+    } catch {
+      toast.error('Неуспешно обновяване на имота');
+    } finally {
+      setEditPropertyVisible(false);
+    }
   }
 
   async function handleToggleStatus(next: 'free' | 'unavailable') {
     if (!property || property.status === next) return;
-    await db.update(properties).set({ status: next }).where(eq(properties.id, property.id));
-    await loadData();
+    try {
+      await db.update(properties).set({ status: next }).where(eq(properties.id, property.id));
+      await loadData();
+      toast.success('Статусът е обновен');
+    } catch {
+      toast.error('Неуспешна промяна на статуса');
+    }
   }
 
   function handleDeleteProperty() {
     if (!property) return;
     if (activeLease) {
-      Alert.alert('Не може да се изтрие', 'Имотът има активен договор. Първо приключете договора.');
+      toast.error('Изтриването е блокирано: има активен договор');
       return;
     }
     Alert.alert('Изтриване на имот', `Сигурни ли сте, че искате да изтриете „${property.name}“?`, [
@@ -188,8 +224,13 @@ export default function PropertyDetailScreen() {
         text: 'Изтрий',
         style: 'destructive',
         onPress: async () => {
-          await softDeleteProperty(db, property.id);
-          router.back();
+          try {
+            await softDeleteProperty(db, property.id);
+            toast.success('Имотът е изтрит');
+            router.back();
+          } catch {
+            toast.error('Неуспешно изтриране на имота');
+          }
         },
       },
     ]);
