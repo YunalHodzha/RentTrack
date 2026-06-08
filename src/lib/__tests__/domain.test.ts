@@ -7,6 +7,7 @@ import {
   listPeriods,
   formatDate,
   isPaymentOverdue,
+  paymentDueDate,
 } from '../domain';
 
 describe('domain utilities', () => {
@@ -201,6 +202,39 @@ describe('domain utilities', () => {
       // April has 30 days; day 31 clamps to the 30th.
       expect(isPaymentOverdue('2026-04', 31, '2026-04-30')).toBe(false);
       expect(isPaymentOverdue('2026-04', 31, '2026-05-01')).toBe(true);
+    });
+  });
+
+  describe('paymentDueDate', () => {
+    // Датите се сглобяват от ISO низ (UTC полунощ), затова сверяваме през getUTC*,
+    // за да е тестът независим от часовата зона на машината.
+    it('clamps day 31 to end of February (non-leap year)', () => {
+      // 2026 не е високосна → февруари има 28 дни; ден 31 се ограничава до 28-и.
+      const d = paymentDueDate('2026-02', 31)!;
+      expect(d.getUTCFullYear()).toBe(2026);
+      expect(d.getUTCMonth()).toBe(1); // 0-базиран: февруари
+      expect(d.getUTCDate()).toBe(28);
+    });
+
+    it('clamps day 31 to end of February (leap year)', () => {
+      // 2024 е високосна → февруари има 29 дни; ден 31 се ограничава до 29-и.
+      expect(paymentDueDate('2024-02', 31)!.getUTCDate()).toBe(29);
+    });
+
+    it('clamps day 31 in 30-day months', () => {
+      // Април има 30 дни; ден 31 се ограничава до 30-и.
+      expect(paymentDueDate('2026-04', 31)!.getUTCDate()).toBe(30);
+    });
+
+    it('keeps a valid day unchanged', () => {
+      const d = paymentDueDate('2026-06', 15)!;
+      expect(d.getUTCMonth()).toBe(5); // 0-базиран: юни
+      expect(d.getUTCDate()).toBe(15);
+    });
+
+    it('returns null for unparseable period', () => {
+      expect(paymentDueDate('invalid', 15)).toBeNull();
+      expect(paymentDueDate('2026', 15)).toBeNull();
     });
   });
 });

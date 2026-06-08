@@ -151,3 +151,18 @@ export function isPaymentOverdue(period: string, paymentDay: number, today: stri
   const dueDate = `${m[1]}-${m[2]}-${String(clampedDay).padStart(2, '0')}`;
   return today > dueDate;
 }
+
+/**
+ * Дата на падежа за период ('yyyy-MM') и ден за плащане. Денят се ограничава до
+ * реалната дължина на месеца — за paymentDay=31 във февруари връща 28-и/29-и
+ * вместо да се „търкулне" към следващия месец (както при `isPaymentOverdue`).
+ * Връща `null` при невалиден период.
+ */
+export function paymentDueDate(period: string, paymentDay: number): Date | null {
+  const m = /^(\d{4})-(\d{2})$/.exec(period);
+  if (!m) return null;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const clampedDay = Math.min(paymentDay, daysInMonth(year, month));
+  return new Date(`${m[1]}-${m[2]}-${String(clampedDay).padStart(2, '0')}`);
+}

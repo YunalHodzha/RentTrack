@@ -11,7 +11,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { leases, payments } from '@/db/schema';
 import { ownedAndLive, currentUserId } from '@/db/owner';
-import { formatPeriod, addPeriodMonths, formatMoney, type Currency } from '@/lib/domain';
+import { formatPeriod, addPeriodMonths, formatMoney, paymentDueDate, type Currency } from '@/lib/domain';
 import { useSettingsStore } from '@/store/settings';
 
 // Notifications were removed from Expo Go in SDK 53. When running in Expo Go we
@@ -106,8 +106,10 @@ export async function schedulePaymentReminders() {
 
       if (existingPayment?.status === 'paid') continue;
 
-      const [year, month] = period.split('-');
-      const dueDate = new Date(`${year}-${month}-${String(lease.paymentDay).padStart(2, '0')}`);
+      // Денят се ограничава до дължината на месеца (paymentDay=31 във февруари →
+      // 28-и/29-и), за да не се „търкаля" падежът към следващия месец.
+      const dueDate = paymentDueDate(period, lease.paymentDay);
+      if (!dueDate) continue;
       const reminderDate = new Date(dueDate);
       reminderDate.setDate(reminderDate.getDate() - notificationDaysBefore);
 
