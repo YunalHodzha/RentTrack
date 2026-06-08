@@ -164,7 +164,7 @@ export default function SettingsScreen() {
           <Button
             label={syncStatus === 'syncing' ? 'Синхронизиране…' : 'Синхронизирай сега'}
             variant="secondary"
-            onPress={() => { syncNow({ notify: true }); }}
+            onPress={() => { syncNow({ notifySuccess: true, notifyError: true }); }}
             disabled={syncStatus === 'syncing'}
             fullWidth
             style={{ marginTop: spacing.md }}

@@ -44,11 +44,14 @@ let inFlight = false;
  * unconfigured, signed out, or already running, and swallows transport errors
  * (offline) so the next trigger simply retries.
  *
- * `notify` управлява видимата обратна връзка (toast): подава се само от ръчния
- * sync в Настройки. Фоновите тригери (интервал/foreground/reconnect) мълчат,
- * иначе offline означава toast на всеки 60 секунди.
+ * `notifySuccess`/`notifyError` управляват видимата обратна връзка (toast):
+ *  - ръчният sync в Настройки известява и за двете;
+ *  - sync-ът при старт известява само за грешка (за да не показва „синхронизирано"
+ *    на всяко отваряне);
+ *  - фоновите тригери (интервал/foreground/reconnect) мълчат, иначе offline би
+ *    означавало toast на всеки 60 секунди.
  */
-export async function syncNow(options: { notify?: boolean } = {}): Promise<void> {
+export async function syncNow(options: { notifySuccess?: boolean; notifyError?: boolean } = {}): Promise<void> {
   if (!isSupabaseConfigured || inFlight) return;
   const userId = useAuthStore.getState().user?.id;
   if (!userId) return;
@@ -61,10 +64,10 @@ export async function syncNow(options: { notify?: boolean } = {}): Promise<void>
     // Only after a successful run (so an offline failure retries the claim).
     if (!alreadyMigrated) await AsyncStorage.setItem(PREAUTH_MIGRATED_KEY, '1');
     useSyncStore.getState().markSynced();
-    if (options.notify) toast.success('Данните са синхронизирани');
+    if (options.notifySuccess) toast.success('Данните са синхронизирани');
   } catch (e) {
     useSyncStore.getState().markError(e instanceof Error ? e.message : 'Неуспешна синхронизация');
-    if (options.notify) toast.error('Няма връзка — промените ще се синхронизират по-късно');
+    if (options.notifyError) toast.error('Няма връзка — промените ще се синхронизират по-късно');
   } finally {
     inFlight = false;
   }
@@ -76,7 +79,8 @@ export async function syncNow(options: { notify?: boolean } = {}): Promise<void>
  * ends so timers and listeners are torn down.
  */
 export function setupSyncTriggers(): () => void {
-  void syncNow();
+  // Стартовият sync известява при провал (offline на старта), но не и при успех.
+  void syncNow({ notifyError: true });
 
   const interval = setInterval(() => { void syncNow(); }, SYNC_INTERVAL_MS);
 
