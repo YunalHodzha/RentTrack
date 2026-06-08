@@ -1,5 +1,6 @@
 import '../global.css';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { View } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -11,7 +12,7 @@ import { requestNotificationPermissions, schedulePaymentReminders, setupNotifica
 import { useSettingsStore } from '@/store/settings';
 import { useAuthStore } from '@/store/auth';
 import { setupSyncTriggers } from '@/services/sync-runtime';
-import { Loading, ToastHost } from '@/components/ui';
+import { Loading, ToastHost, ErrorState } from '@/components/ui';
 import { AuthScreen } from '@/components/auth-screen';
 import { useTheme } from '@/theme';
 
@@ -19,10 +20,12 @@ SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const [dbReady, setDbReady] = useState(false);
+  const [initError, setInitError] = useState(false);
   const { session, initializing: authInitializing } = useAuthStore();
   const t = useTheme();
 
-  useEffect(() => {
+  const runInit = useCallback(() => {
+    setInitError(false);
     setupNotificationListeners();
     const loadSettings = useSettingsStore.getState().loadSettings;
     const initAuth = useAuthStore.getState().init;
@@ -31,9 +34,16 @@ export default function RootLayout() {
       .then(() => requestNotificationPermissions())
       .then(() => initAuth())
       .then(() => setDbReady(true))
-      .catch(console.error)
+      .catch((e) => { console.error(e); setInitError(true); })
       .finally(() => SplashScreen.hideAsync());
   }, []);
+
+  useEffect(() => { runInit(); }, [runInit]);
+
+  function handleRetryInit() {
+    setDbReady(false);
+    runInit();
+  }
 
   const ready = dbReady && !authInitializing;
 
@@ -52,7 +62,15 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <StatusBar style={t.isDark ? 'light' : 'dark'} />
-        {!ready ? (
+        {initError ? (
+          <View style={{ flex: 1, backgroundColor: t.bg, justifyContent: 'center' }}>
+            <ErrorState
+              title="Грешка при стартиране"
+              message="Данните не можаха да се заредят. Проверете връзката и опитайте отново."
+              onRetry={handleRetryInit}
+            />
+          </View>
+        ) : !ready ? (
           <Loading />
         ) : !session ? (
           <AuthScreen />
