@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { View, Text, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
+import { View, Text, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen, Card, Field, Input, Button, useTheme, spacing } from '@/components/ui';
 import { useAuthStore } from '@/store/auth';
+import { toast } from '@/store/toast';
 import { isSupabaseConfigured } from '@/services/supabase';
 
 type Mode = 'signin' | 'signup';
@@ -25,16 +26,16 @@ export function AuthScreen() {
 
   async function handleSubmit() {
     if (!isSupabaseConfigured) {
-      Alert.alert('Не е конфигуриран', 'Липсва връзка със Supabase. Задайте EXPO_PUBLIC_SUPABASE_URL и EXPO_PUBLIC_SUPABASE_ANON_KEY в .env.');
+      toast.error('Supabase не е конфигуриран (.env)');
       return;
     }
     const trimmedEmail = email.trim();
     if (!/^\S+@\S+\.\S+$/.test(trimmedEmail)) {
-      Alert.alert('Невалиден имейл', 'Моля, въведете валиден имейл адрес.');
+      toast.error('Въведете валиден имейл адрес');
       return;
     }
     if (password.length < 6) {
-      Alert.alert('Кратка парола', 'Паролата трябва да е поне 6 символа.');
+      toast.error('Паролата трябва да е поне 6 символа');
       return;
     }
 
@@ -45,15 +46,14 @@ export function AuthScreen() {
         : await signIn(trimmedEmail, password);
 
       if (error) {
-        Alert.alert('Грешка', error);
+        toast.error(isSignup ? 'Регистрацията е неуспешна. Опитайте отново.' : 'Входът е неуспешен. Проверете имейла и паролата.');
       } else if (isSignup) {
-        Alert.alert(
-          'Проверете имейла си',
-          'Изпратихме потвърждение на имейла ви. Потвърдете го и влезте.',
-        );
+        toast.info('Проверете имейла си за потвърждение');
         setMode('signin');
+      } else {
+        // На успешен вход auth слушателят сменя този екран с приложението.
+        toast.success('Влязохте успешно');
       }
-      // On successful sign-in the auth listener swaps this screen for the app.
     } finally {
       setSubmitting(false);
     }

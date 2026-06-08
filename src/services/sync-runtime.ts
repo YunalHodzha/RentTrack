@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { db } from '@/db/client';
 import { useAuthStore } from '@/store/auth';
 import { useSyncStore } from '@/store/sync';
+import { toast } from '@/store/toast';
 import { isSupabaseConfigured, requireSupabase } from '@/services/supabase';
 import { runSync, type CursorStore, type SyncRemote, type TableName } from '@/services/sync';
 
@@ -42,8 +43,12 @@ let inFlight = false;
  * Run a sync if possible. Safe to call from any trigger: it no-ops when
  * unconfigured, signed out, or already running, and swallows transport errors
  * (offline) so the next trigger simply retries.
+ *
+ * `notify` управлява видимата обратна връзка (toast): подава се само от ръчния
+ * sync в Настройки. Фоновите тригери (интервал/foreground/reconnect) мълчат,
+ * иначе offline означава toast на всеки 60 секунди.
  */
-export async function syncNow(): Promise<void> {
+export async function syncNow(options: { notify?: boolean } = {}): Promise<void> {
   if (!isSupabaseConfigured || inFlight) return;
   const userId = useAuthStore.getState().user?.id;
   if (!userId) return;
@@ -56,8 +61,10 @@ export async function syncNow(): Promise<void> {
     // Only after a successful run (so an offline failure retries the claim).
     if (!alreadyMigrated) await AsyncStorage.setItem(PREAUTH_MIGRATED_KEY, '1');
     useSyncStore.getState().markSynced();
+    if (options.notify) toast.success('Данните са синхронизирани');
   } catch (e) {
     useSyncStore.getState().markError(e instanceof Error ? e.message : 'Неуспешна синхронизация');
+    if (options.notify) toast.error('Няма връзка — промените ще се синхронизират по-късно');
   } finally {
     inFlight = false;
   }

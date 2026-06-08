@@ -10,6 +10,7 @@ import {
 import { useSettingsStore } from '@/store/settings';
 import { useAuthStore } from '@/store/auth';
 import { useSyncStore } from '@/store/sync';
+import { toast } from '@/store/toast';
 import { syncNow } from '@/services/sync-runtime';
 import { schedulePaymentReminders } from '@/services/notifications';
 import { exportDataAsJSON, exportDataAsCSV, importDataFromJSON } from '@/services/export';
@@ -38,14 +39,18 @@ export default function SettingsScreen() {
   async function handleSaveSettings() {
     const days = parseInt(localDaysBefore, 10);
     if (isNaN(days) || days < 0 || days > 30) {
-      Alert.alert('Невалидно значение', 'Брой дни трябва да е между 0 и 30.');
+      toast.error('Брой дни трябва да е между 0 и 30');
       return;
     }
 
-    await updateDefaultCurrency(localCurrency);
-    await updateNotificationDaysBefore(days);
-    await schedulePaymentReminders();
-    Alert.alert('Успех', 'Настройките са запазени.');
+    try {
+      await updateDefaultCurrency(localCurrency);
+      await updateNotificationDaysBefore(days);
+      await schedulePaymentReminders();
+      toast.success('Настройките са запазени');
+    } catch {
+      toast.error('Неуспешно запазване на настройките');
+    }
   }
 
   async function handleExportJSON() {
@@ -58,7 +63,7 @@ export default function SettingsScreen() {
         title: 'RentTrack Data Export (JSON)',
       });
     } catch (error) {
-      Alert.alert('Грешка', 'Неуспешен экспорт на JSON данни.');
+      toast.error('Неуспешен експорт на JSON данните');
       console.error(error);
     }
   }
@@ -72,7 +77,7 @@ export default function SettingsScreen() {
         title: 'RentTrack Data Export (CSV)',
       });
     } catch (error) {
-      Alert.alert('Грешка', 'Неуспешен экспорт на CSV данни.');
+      toast.error('Неуспешен експорт на CSV данните');
       console.error(error);
     }
   }
@@ -80,7 +85,14 @@ export default function SettingsScreen() {
   function handleSignOut() {
     Alert.alert('Изход', 'Сигурни ли сте, че искате да излезете?', [
       { text: 'Отказ', style: 'cancel' },
-      { text: 'Изход', style: 'destructive', onPress: () => { signOut(); } },
+      {
+        text: 'Изход',
+        style: 'destructive',
+        onPress: async () => {
+          await signOut();
+          toast.success('Излязохте от профила');
+        },
+      },
     ]);
   }
 
@@ -107,12 +119,9 @@ export default function SettingsScreen() {
               try {
                 const counts = importDataFromJSON(json);
                 await schedulePaymentReminders();
-                Alert.alert(
-                  'Успех',
-                  `Внесени: ${counts.properties} имота, ${counts.tenants} наематели, ${counts.leases} договора, ${counts.payments} плащания.`
-                );
+                toast.success(`Възстановени: ${counts.properties} имота, ${counts.tenants} наематели, ${counts.leases} договора, ${counts.payments} плащания`);
               } catch (err) {
-                Alert.alert('Грешка', err instanceof Error ? err.message : 'Неуспешно внасяне.');
+                toast.error(err instanceof Error ? err.message : 'Неуспешно внасяне на данните');
                 console.error(err);
               }
             },
@@ -120,7 +129,7 @@ export default function SettingsScreen() {
         ]
       );
     } catch (error) {
-      Alert.alert('Грешка', 'Неуспешно отваряне на файла.');
+      toast.error('Неуспешно отваряне на файла');
       console.error(error);
     }
   }
@@ -155,7 +164,7 @@ export default function SettingsScreen() {
           <Button
             label={syncStatus === 'syncing' ? 'Синхронизиране…' : 'Синхронизирай сега'}
             variant="secondary"
-            onPress={() => { syncNow(); }}
+            onPress={() => { syncNow({ notify: true }); }}
             disabled={syncStatus === 'syncing'}
             fullWidth
             style={{ marginTop: spacing.md }}
