@@ -149,9 +149,13 @@ describe('soft-delete foundations', () => {
     it('rejects two live payments for the same lease+period', async () => {
       const { db } = makeDb();
       await seedPropertyWithChildren(db);
-      await expect(
-        db.insert(payments).values({ id: 'dup', leaseId: 'l1', period: '2026-01', amount: 500, status: 'paid' }),
-      ).rejects.toThrow();
+      // better-sqlite3 е синхронен драйвер: нарушението на partial unique индекса
+      // изплува като синхронно хвърляне при .run(). Проверяваме го директно, защото
+      // `await expect(builder).rejects` е flaky с мързеливия синхронен thenable на
+      // drizzle (понякога Jest го отчита като resolved).
+      expect(() =>
+        db.insert(payments).values({ id: 'dup', leaseId: 'l1', period: '2026-01', amount: 500, status: 'paid' }).run(),
+      ).toThrow(/UNIQUE constraint/);
     });
 
     it('allows re-using a period after the previous payment is soft-deleted', async () => {
