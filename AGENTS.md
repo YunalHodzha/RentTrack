@@ -1,3 +1,6 @@
 # Expo HAS CHANGED
 
-Read the exact versioned docs at https://docs.expo.dev/versions/v56.0.0/ before writing any code.
+Проектът е на **Expo SDK 54** (`expo` в `package.json` е `~54.0.0`).
+Прочети точните версионирани докове на https://docs.expo.dev/versions/v54.0.0/
+преди да пишеш какъвто и да е код. (Свери версията спрямо `package.json`, ако се
+съмняваш — не приемай, че доковете за друга SDK версия важат.)
