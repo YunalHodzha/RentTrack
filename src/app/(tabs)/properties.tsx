@@ -10,24 +10,36 @@ import { useFocusReload } from '@/hooks/use-focus-reload';
 import type { NewProperty, Property } from '@/db/schema';
 import { generateId } from '@/lib/uuid';
 import {
-  Screen, Header, Card, Badge, IconBadge, FAB, EmptyState, SheetModal, Field, Input, ChipGroup,
-  useTheme, spacing,
+  Screen, Header, Card, Badge, IconBadge, FAB, EmptyState, ListSkeleton, ErrorState, Button,
+  SheetModal, Field, Input, ChipGroup, useTheme, spacing,
 } from '@/components/ui';
+import { useLoadingState } from '@/hooks/use-loading-state';
 import { PROPERTY_TYPES, TYPE_LABELS, TYPE_ICONS, STATUS_LABELS, STATUS_TONE } from '@/lib/domain';
 
 export default function PropertiesScreen() {
   const t = useTheme();
   const { properties: list, setProperties } = useAppStore();
   const [modalVisible, setModalVisible] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState(false);
 
   const loadProperties = useCallback(async () => {
     const uid = currentUserId();
-    if (!uid) { setProperties([]); return; }
-    const rows = await db.select().from(properties).where(ownedAndLive(properties, uid));
-    setProperties(rows);
+    if (!uid) { setProperties([]); setLoaded(true); return; }
+    try {
+      setError(false);
+      const rows = await db.select().from(properties).where(ownedAndLive(properties, uid));
+      setProperties(rows);
+    } catch {
+      setError(true);
+    } finally {
+      setLoaded(true);
+    }
   }, [setProperties]);
 
   useFocusReload(loadProperties);
+
+  const phase = useLoadingState(loaded, list.length === 0);
 
   async function handleAdd(data: NewProperty) {
     // Затваряме модала и в двата случая (RN Modal крие toast-а отдолу), за да е
@@ -61,20 +73,27 @@ export default function PropertiesScreen() {
     <Screen>
       <Header title="Имоти" subtitle={`${list.length} ${list.length === 1 ? 'имот' : 'имота'}`} />
 
-      <FlatList
-        data={list}
-        keyExtractor={(item) => String(item.id)}
-        renderItem={renderItem}
-        contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: 120 }}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <EmptyState
-            icon="🏠"
-            title="Все още няма имоти"
-            message="Натиснете бутона +, за да добавите първия си имот."
-          />
-        }
-      />
+      {error && list.length === 0 ? (
+        <ErrorState message="Имотите не можаха да се заредят." onRetry={loadProperties} />
+      ) : phase === 'skeleton' ? (
+        <ListSkeleton />
+      ) : phase === 'pending' ? null : (
+        <FlatList
+          data={list}
+          keyExtractor={(item) => String(item.id)}
+          renderItem={renderItem}
+          contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: 120 }}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <EmptyState
+              icon="🏠"
+              title="Все още няма имоти"
+              message="Добавете първия си имот, за да започнете."
+              action={<Button label="Добави имот" onPress={() => setModalVisible(true)} />}
+            />
+          }
+        />
+      )}
 
       <FAB onPress={() => setModalVisible(true)} />
 

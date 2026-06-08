@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { View, Text, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { format } from 'date-fns';
@@ -7,27 +7,39 @@ import { properties, leases, payments } from '@/db/schema';
 import { ownedAndLive, currentUserId } from '@/db/owner';
 import { useAppStore } from '@/store';
 import { useFocusReload } from '@/hooks/use-focus-reload';
-import { Header, Card, ProgressBar, Button, EmptyState, useTheme, spacing, radius, shadow } from '@/components/ui';
+import { useLoadingState } from '@/hooks/use-loading-state';
+import { Header, Card, ProgressBar, Button, EmptyState, Skeleton, ErrorState, useTheme, spacing, radius, shadow } from '@/components/ui';
 import { formatMoney, formatPeriod, type Currency } from '@/lib/domain';
 
 export default function DashboardScreen() {
   const t = useTheme();
   const { properties: props, leases: leaseList, payments: payList, setProperties, setLeases, setPayments } = useAppStore();
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState(false);
 
   const loadAll = useCallback(async () => {
     const uid = currentUserId();
-    if (!uid) { setProperties([]); setLeases([]); setPayments([]); return; }
-    const [p, l, pay] = await Promise.all([
-      db.select().from(properties).where(ownedAndLive(properties, uid)),
-      db.select().from(leases).where(ownedAndLive(leases, uid)),
-      db.select().from(payments).where(ownedAndLive(payments, uid)),
-    ]);
-    setProperties(p);
-    setLeases(l);
-    setPayments(pay);
+    if (!uid) { setProperties([]); setLeases([]); setPayments([]); setLoaded(true); return; }
+    try {
+      setError(false);
+      const [p, l, pay] = await Promise.all([
+        db.select().from(properties).where(ownedAndLive(properties, uid)),
+        db.select().from(leases).where(ownedAndLive(leases, uid)),
+        db.select().from(payments).where(ownedAndLive(payments, uid)),
+      ]);
+      setProperties(p);
+      setLeases(l);
+      setPayments(pay);
+    } catch {
+      setError(true);
+    } finally {
+      setLoaded(true);
+    }
   }, [setProperties, setLeases, setPayments]);
 
   useFocusReload(loadAll);
+
+  const phase = useLoadingState(loaded, props.length === 0);
 
   const currentPeriod = format(new Date(), 'yyyy-MM');
   const activeLeases = leaseList.filter((l) => l.status === 'active');
@@ -73,6 +85,11 @@ export default function DashboardScreen() {
     <ScrollView style={{ flex: 1, backgroundColor: t.bg }} contentContainerStyle={{ paddingBottom: 40 }}>
       <Header title="Табло" subtitle={monthCapitalized} />
 
+      {error && props.length === 0 ? (
+        <ErrorState message="Данните не можаха да се заредят." onRetry={loadAll} />
+      ) : phase === 'skeleton' ? (
+        <DashboardSkeleton />
+      ) : phase === 'pending' ? null : (
       <View style={{ paddingHorizontal: spacing.xl, gap: spacing.lg }}>
         {/* Hero — expected monthly income */}
         <View
@@ -154,7 +171,21 @@ export default function DashboardScreen() {
           </View>
         ) : null}
       </View>
+      )}
     </ScrollView>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <View style={{ paddingHorizontal: spacing.xl, gap: spacing.lg }}>
+      <Skeleton height={150} style={{ borderRadius: radius.xl }} />
+      <View style={{ flexDirection: 'row', gap: spacing.md }}>
+        <View style={{ flex: 1 }}><Skeleton height={92} style={{ borderRadius: radius.lg }} /></View>
+        <View style={{ flex: 1 }}><Skeleton height={92} style={{ borderRadius: radius.lg }} /></View>
+      </View>
+      <Skeleton height={80} style={{ borderRadius: radius.lg }} />
+    </View>
   );
 }
 

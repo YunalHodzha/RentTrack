@@ -11,28 +11,40 @@ import { ownedAndLive, currentUserId, withOwner } from '@/db/owner';
 import type { NewTenant, Tenant } from '@/db/schema';
 import { generateId } from '@/lib/uuid';
 import {
-  Screen, Header, Card, Avatar, Badge, FAB, EmptyState, SheetModal, Field, Input,
-  useTheme, spacing,
+  Screen, Header, Card, Avatar, Badge, FAB, EmptyState, ListSkeleton, ErrorState, Button,
+  SheetModal, Field, Input, useTheme, spacing,
 } from '@/components/ui';
+import { useLoadingState } from '@/hooks/use-loading-state';
 
 export default function TenantsScreen() {
   const t = useTheme();
   const { tenants: list, setTenants } = useAppStore();
   const [activeIds, setActiveIds] = useState<Set<string>>(new Set());
   const [modalVisible, setModalVisible] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState(false);
 
   const loadTenants = useCallback(async () => {
     const uid = currentUserId();
-    if (!uid) { setTenants([]); setActiveIds(new Set()); return; }
-    const [rows, activeLeases] = await Promise.all([
-      db.select().from(tenants).where(ownedAndLive(tenants, uid)),
-      db.select().from(leases).where(ownedAndLive(leases, uid, eq(leases.status, 'active'))),
-    ]);
-    setTenants(rows);
-    setActiveIds(new Set(activeLeases.map((l) => l.tenantId)));
+    if (!uid) { setTenants([]); setActiveIds(new Set()); setLoaded(true); return; }
+    try {
+      setError(false);
+      const [rows, activeLeases] = await Promise.all([
+        db.select().from(tenants).where(ownedAndLive(tenants, uid)),
+        db.select().from(leases).where(ownedAndLive(leases, uid, eq(leases.status, 'active'))),
+      ]);
+      setTenants(rows);
+      setActiveIds(new Set(activeLeases.map((l) => l.tenantId)));
+    } catch {
+      setError(true);
+    } finally {
+      setLoaded(true);
+    }
   }, [setTenants]);
 
   useFocusReload(loadTenants);
+
+  const phase = useLoadingState(loaded, list.length === 0);
 
   async function handleAdd(data: NewTenant) {
     try {
@@ -64,20 +76,27 @@ export default function TenantsScreen() {
     <Screen>
       <Header title="Наематели" subtitle={`${list.length} ${list.length === 1 ? 'наемател' : 'наематели'}`} />
 
-      <FlatList
-        data={list}
-        keyExtractor={(item) => String(item.id)}
-        renderItem={renderItem}
-        contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: 120 }}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <EmptyState
-            icon="👥"
-            title="Все още няма наематели"
-            message="Натиснете бутона +, за да добавите първия си наемател."
-          />
-        }
-      />
+      {error && list.length === 0 ? (
+        <ErrorState message="Наемателите не можаха да се заредят." onRetry={loadTenants} />
+      ) : phase === 'skeleton' ? (
+        <ListSkeleton />
+      ) : phase === 'pending' ? null : (
+        <FlatList
+          data={list}
+          keyExtractor={(item) => String(item.id)}
+          renderItem={renderItem}
+          contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: 120 }}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <EmptyState
+              icon="👥"
+              title="Все още няма наематели"
+              message="Добавете първия си наемател, за да започнете."
+              action={<Button label="Добави наемател" onPress={() => setModalVisible(true)} />}
+            />
+          }
+        />
+      )}
 
       <FAB onPress={() => setModalVisible(true)} />
 
