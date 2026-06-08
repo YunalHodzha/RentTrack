@@ -231,10 +231,10 @@
 - [ ] Провери, че pre-auth локалните данни се „осиновяват" коректно при първи вход (claim на `user_id`).
 
 #### 4.5.2 — Поправки и хигиена (P1)
-- [ ] **Edge case в известията:** `schedulePaymentReminders` (`src/services/notifications.ts`) не ограничава деня спрямо дължината на месеца — за `paymentDay = 31` във февруари датата се „търкулва" към март. Приложи същия clamp като в `domain.ts` (`Math.min(paymentDay, daysInMonth(...))`).
-- [ ] **`AGENTS.md`** сочи към Expo `v56.0.0` docs, а проектът е SDK 54 — уеднакви референцията, за да не заблуждава Claude Code.
-- [ ] `npx expo-doctor` + `npx expo install --check` — чиста основа преди билд.
-- [ ] Зелени тестове (`npm test`) и lint (`npx expo lint`) преди да продължиш.
+- [x] **Edge case в известията:** `schedulePaymentReminders` (`src/services/notifications.ts`) не ограничава деня спрямо дължината на месеца — за `paymentDay = 31` във февруари датата се „търкулва" към март. Приложи същия clamp като в `domain.ts` (`Math.min(paymentDay, daysInMonth(...))`). → изведена чиста `paymentDueDate()` в `domain.ts` + unit тестове.
+- [x] **`AGENTS.md`** сочи към Expo `v56.0.0` docs, а проектът е SDK 54 — уеднакви референцията, за да не заблуждава Claude Code. → сменено на v54.0.0, вързано към `package.json`.
+- [x] `npx expo-doctor` + `npx expo install --check` — чиста основа преди билд. → `@types/jest` изравнен на 29.5.14; **expo-doctor 18/18**, dependencies up to date.
+- [x] Зелени тестове (`npm test`) и lint (`npx expo lint`) преди да продължиш. → 56 теста зелени (детерминиран и един flaky тест), lint 0 errors.
 
 #### 4.5.3 — UX полиране (P2 — основен фокус на тази фаза)
 Приложението вече е функционално; тук става приятно и предсказуемо за ползване.
