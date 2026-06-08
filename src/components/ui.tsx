@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView, Modal,
   KeyboardAvoidingView, Platform, ActivityIndicator, Animated,
-  type ViewStyle, type TextStyle, type TextInputProps, type StyleProp,
+  type ViewStyle, type TextStyle, type TextInputProps, type StyleProp, type DimensionValue,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, toneColors, spacing, radius, shadow, type Theme, type Tone } from '@/theme';
@@ -342,6 +342,77 @@ export function Loading() {
   return (
     <View style={{ flex: 1, backgroundColor: t.bg, alignItems: 'center', justifyContent: 'center' }}>
       <ActivityIndicator color={t.primary} size="large" />
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Loading skeletons + error state.
+ * ------------------------------------------------------------------ */
+
+/** Лек пулсиращ плейсхолдър блок. Композирай го за skeleton оформления. */
+export function Skeleton({ height = 14, width = '100%', style }: { height?: number; width?: DimensionValue; style?: StyleProp<ViewStyle> }) {
+  const t = useTheme();
+  const pulse = useRef(new Animated.Value(0.5)).current;
+  useEffect(() => {
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(pulse, { toValue: 1, duration: 650, useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 0.5, duration: 650, useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+  return <Animated.View style={[{ height, width, borderRadius: radius.sm, backgroundColor: t.cardAlt, opacity: pulse }, style]} />;
+}
+
+/** Skeleton, наподобяващ редовете на списък (имоти / наематели). */
+export function ListSkeleton({ rows = 5 }: { rows?: number }) {
+  const t = useTheme();
+  return (
+    <View style={{ paddingHorizontal: spacing.xl, gap: spacing.md }}>
+      {Array.from({ length: rows }).map((_, i) => (
+        <View
+          key={i}
+          style={{
+            flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+            backgroundColor: t.card, borderRadius: radius.lg, borderWidth: 1, borderColor: t.border,
+            padding: spacing.lg,
+          }}>
+          <Skeleton width={44} height={44} style={{ borderRadius: radius.md }} />
+          <View style={{ flex: 1, gap: spacing.sm }}>
+            <Skeleton width="55%" height={14} />
+            <Skeleton width="35%" height={11} />
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/** Грешка с разбираемо съобщение и бутон „Опитай отново". */
+export function ErrorState({ title = 'Нещо се обърка', message, onRetry, retryLabel = 'Опитай отново' }: {
+  title?: string;
+  message?: string;
+  onRetry?: () => void;
+  retryLabel?: string;
+}) {
+  const t = useTheme();
+  return (
+    <View style={{ alignItems: 'center', paddingHorizontal: spacing.xl, paddingTop: 72 }}>
+      <View
+        style={{
+          width: 92, height: 92, borderRadius: 46,
+          backgroundColor: t.dangerSoft, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.lg,
+        }}>
+        <Text style={{ fontSize: 42 }}>⚠️</Text>
+      </View>
+      <Text style={{ fontSize: 19, fontWeight: '800', color: t.text, textAlign: 'center' }}>{title}</Text>
+      {message ? (
+        <Text style={{ fontSize: 14, color: t.textSecondary, marginTop: 8, textAlign: 'center', lineHeight: 20, maxWidth: 280 }}>
+          {message}
+        </Text>
+      ) : null}
+      {onRetry ? <View style={{ marginTop: spacing.xl }}><Button label={retryLabel} onPress={onRetry} /></View> : null}
     </View>
   );
 }
