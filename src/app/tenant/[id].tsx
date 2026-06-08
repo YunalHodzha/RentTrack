@@ -8,6 +8,7 @@ import { tenants, leases, properties, payments } from '@/db/schema';
 import type { Tenant, Lease, Property, Payment } from '@/db/schema';
 import { ownedAndLive, currentUserId } from '@/db/owner';
 import { softDeleteTenant } from '@/db/soft-delete';
+import { toast } from '@/store/toast';
 import {
   Screen, Card, Badge, Avatar, SectionTitle, Button, Field, Input,
   InfoRow, Divider, EmptyState, Loading, SheetModal, useTheme, spacing, radius,
@@ -69,15 +70,21 @@ export default function TenantDetailScreen() {
 
   async function handleEdit(data: { name: string; phone: string | null; email: string | null; notes: string | null }) {
     if (!tenant) return;
-    await db.update(tenants).set(data).where(eq(tenants.id, tenant.id));
-    await loadData();
-    setEditVisible(false);
+    try {
+      await db.update(tenants).set(data).where(eq(tenants.id, tenant.id));
+      await loadData();
+      toast.success('Наемателят е обновен');
+    } catch {
+      toast.error('Неуспешно обновяване на наемателя');
+    } finally {
+      setEditVisible(false);
+    }
   }
 
   function handleDelete() {
     if (!tenant) return;
     if (activeLease) {
-      Alert.alert('Не може да се изтрие', 'Наемателят има активен договор. Първо приключете договора.');
+      toast.error('Изтриването е блокирано: има активен договор');
       return;
     }
     const extra = hasAnyLease ? ' Историята на договорите и плащанията също ще бъде изтрита.' : '';
@@ -87,8 +94,13 @@ export default function TenantDetailScreen() {
         text: 'Изтрий',
         style: 'destructive',
         onPress: async () => {
-          await softDeleteTenant(db, tenant.id);
-          router.back();
+          try {
+            await softDeleteTenant(db, tenant.id);
+            toast.success('Наемателят е изтрит');
+            router.back();
+          } catch {
+            toast.error('Неуспешно изтриране на наемателя');
+          }
         },
       },
     ]);
