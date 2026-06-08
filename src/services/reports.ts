@@ -9,13 +9,13 @@ export interface MonthlyReport {
   income: number;
   collected: number;
   outstanding: number;
-  propertyBreakdown: Array<{
+  propertyBreakdown: {
     propertyId: string;
     propertyName: string;
     rentAmount: number;
     collected: number;
     outstanding: number;
-  }>;
+  }[];
 }
 
 export interface YearlyReport {
@@ -116,12 +116,12 @@ export async function generatePropertyReport(
   propertyId: string,
   startPeriod: string,
   endPeriod: string
-): Promise<Array<{
+): Promise<{
   period: string;
   rentAmount: number;
   collected: number;
   status: string;
-}>> {
+}[]> {
   const uid = currentUserId();
   if (!uid) return [];
 

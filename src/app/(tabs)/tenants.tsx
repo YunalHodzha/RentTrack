@@ -1,11 +1,10 @@
 import { useCallback, useState } from 'react';
 import { View, Text, FlatList, Alert } from 'react-native';
 import { router } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/core';
 import { db } from '@/db/client';
 import { tenants, leases } from '@/db/schema';
 import { useAppStore } from '@/store';
-import { useSyncStore } from '@/store/sync';
+import { useFocusReload } from '@/hooks/use-focus-reload';
 import { eq } from 'drizzle-orm';
 import { ownedAndLive, currentUserId, withOwner } from '@/db/owner';
 import type { NewTenant, Tenant } from '@/db/schema';
@@ -18,11 +17,10 @@ import {
 export default function TenantsScreen() {
   const t = useTheme();
   const { tenants: list, setTenants } = useAppStore();
-  const syncVersion = useSyncStore((s) => s.version);
   const [activeIds, setActiveIds] = useState<Set<string>>(new Set());
   const [modalVisible, setModalVisible] = useState(false);
 
-  async function loadTenants() {
+  const loadTenants = useCallback(async () => {
     const uid = currentUserId();
     if (!uid) { setTenants([]); setActiveIds(new Set()); return; }
     const [rows, activeLeases] = await Promise.all([
@@ -31,9 +29,9 @@ export default function TenantsScreen() {
     ]);
     setTenants(rows);
     setActiveIds(new Set(activeLeases.map((l) => l.tenantId)));
-  }
+  }, [setTenants]);
 
-  useFocusEffect(useCallback(() => { loadTenants(); }, [syncVersion]));
+  useFocusReload(loadTenants);
 
   async function handleAdd(data: NewTenant) {
     await db.insert(tenants).values(withOwner(data));

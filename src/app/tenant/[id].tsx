@@ -31,7 +31,7 @@ export default function TenantDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [editVisible, setEditVisible] = useState(false);
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
     const uid = currentUserId();
     if (!id || !uid) return;
 
@@ -63,9 +63,9 @@ export default function TenantDetailScreen() {
     setPayRows(rows);
 
     setLoading(false);
-  }
+  }, [id]);
 
-  useFocusEffect(useCallback(() => { loadData(); }, [id]));
+  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
   async function handleEdit(data: { name: string; phone: string | null; email: string | null; notes: string | null }) {
     if (!tenant) return;

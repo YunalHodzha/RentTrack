@@ -1,22 +1,20 @@
 import { useCallback } from 'react';
 import { View, Text, ScrollView } from 'react-native';
-import { useFocusEffect } from '@react-navigation/core';
 import { router } from 'expo-router';
 import { format } from 'date-fns';
 import { db } from '@/db/client';
 import { properties, leases, payments } from '@/db/schema';
 import { ownedAndLive, currentUserId } from '@/db/owner';
 import { useAppStore } from '@/store';
-import { useSyncStore } from '@/store/sync';
+import { useFocusReload } from '@/hooks/use-focus-reload';
 import { Header, Card, ProgressBar, Button, EmptyState, useTheme, spacing, radius, shadow } from '@/components/ui';
 import { formatMoney, formatPeriod, type Currency } from '@/lib/domain';
 
 export default function DashboardScreen() {
   const t = useTheme();
   const { properties: props, leases: leaseList, payments: payList, setProperties, setLeases, setPayments } = useAppStore();
-  const syncVersion = useSyncStore((s) => s.version);
 
-  async function loadAll() {
+  const loadAll = useCallback(async () => {
     const uid = currentUserId();
     if (!uid) { setProperties([]); setLeases([]); setPayments([]); return; }
     const [p, l, pay] = await Promise.all([
@@ -27,10 +25,9 @@ export default function DashboardScreen() {
     setProperties(p);
     setLeases(l);
     setPayments(pay);
-  }
+  }, [setProperties, setLeases, setPayments]);
 
-  // syncVersion in deps: reload when a background sync changes data while focused.
-  useFocusEffect(useCallback(() => { loadAll(); }, [syncVersion]));
+  useFocusReload(loadAll);
 
   const currentPeriod = format(new Date(), 'yyyy-MM');
   const activeLeases = leaseList.filter((l) => l.status === 'active');

@@ -1,9 +1,8 @@
 import { useCallback, useState } from 'react';
 import { View, Text, ScrollView } from 'react-native';
-import { router, Stack } from 'expo-router';
-import { format } from 'date-fns';
+import { Stack } from 'expo-router';
 import {
-  Screen, Card, SectionTitle, Button, useTheme, spacing, radius, toneColors,
+  Screen, Card, SectionTitle, Button, useTheme, spacing, toneColors,
 } from '@/components/ui';
 import { formatMoney, formatPeriod } from '@/lib/domain';
 import { generateMonthlyReport, generateYearlyReport, type MonthlyReport, type YearlyReport } from '@/services/reports';
@@ -15,7 +14,9 @@ export default function ReportsScreen() {
   const [month, setMonth] = useState(`${year}-${String(new Date().getMonth() + 1).padStart(2, '0')}`);
   const [yearlyData, setYearlyData] = useState<YearlyReport | null>(null);
   const [monthlyData, setMonthlyData] = useState<MonthlyReport | null>(null);
-  const [loading, setLoading] = useState(false);
+  // Скелетоните/спинърите за зареждане идват в следваща част на 4.5.3; засега
+  // пазим само сетъра, за да остане scaffold-ингът на място.
+  const [, setLoading] = useState(false);
 
   const loadYearlyReport = useCallback(async () => {
     setLoading(true);

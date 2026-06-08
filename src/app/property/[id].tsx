@@ -40,7 +40,7 @@ export default function PropertyDetailScreen() {
   const [paymentModal, setPaymentModal] = useState<PaymentModalState>(null);
   const [editPropertyVisible, setEditPropertyVisible] = useState(false);
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
     const uid = currentUserId();
     if (!id || !uid) return;
 
@@ -67,9 +67,9 @@ export default function PropertyDetailScreen() {
     }
 
     setLoading(false);
-  }
+  }, [id]);
 
-  useFocusEffect(useCallback(() => { loadData(); }, [id]));
+  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
   const currency: Currency = (activeLease?.currency as Currency) ?? 'EUR';
 
