@@ -1,10 +1,12 @@
 import { useCallback, useState } from 'react';
-import { View, Text, FlatList, Alert } from 'react-native';
+import { View, Text, FlatList, Alert, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
 import { db } from '@/db/client';
 import { tenants, leases } from '@/db/schema';
 import { useAppStore } from '@/store';
 import { toast } from '@/store/toast';
+import { syncNow } from '@/services/sync-runtime';
+import { isSupabaseConfigured } from '@/services/supabase';
 import { useFocusReload } from '@/hooks/use-focus-reload';
 import { eq } from 'drizzle-orm';
 import { ownedAndLive, currentUserId, withOwner } from '@/db/owner';
@@ -23,6 +25,7 @@ export default function TenantsScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const loadTenants = useCallback(async () => {
     const uid = currentUserId();
@@ -45,6 +48,18 @@ export default function TenantsScreen() {
   useFocusReload(loadTenants);
 
   const phase = useLoadingState(loaded, list.length === 0);
+
+  // Pull-to-refresh: реален ръчен sync (mutex-нат) + reload. Резултатът минава
+  // през toast-а от Част 1. Без Supabase — само локален reload, без toast.
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      if (isSupabaseConfigured) await syncNow({ notifySuccess: true, notifyError: true });
+      await loadTenants();
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   async function handleAdd(data: NewTenant) {
     try {
@@ -87,6 +102,9 @@ export default function TenantsScreen() {
           renderItem={renderItem}
           contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={t.primary} colors={[t.primary]} />
+          }
           ListEmptyComponent={
             <EmptyState
               icon="👥"

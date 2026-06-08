@@ -1,11 +1,13 @@
 import { useCallback, useState } from 'react';
-import { View, Text, FlatList, Alert } from 'react-native';
+import { View, Text, FlatList, Alert, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
 import { db } from '@/db/client';
 import { properties } from '@/db/schema';
 import { ownedAndLive, currentUserId, withOwner } from '@/db/owner';
 import { useAppStore } from '@/store';
 import { toast } from '@/store/toast';
+import { syncNow } from '@/services/sync-runtime';
+import { isSupabaseConfigured } from '@/services/supabase';
 import { useFocusReload } from '@/hooks/use-focus-reload';
 import type { NewProperty, Property } from '@/db/schema';
 import { generateId } from '@/lib/uuid';
@@ -22,6 +24,7 @@ export default function PropertiesScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const loadProperties = useCallback(async () => {
     const uid = currentUserId();
@@ -40,6 +43,19 @@ export default function PropertiesScreen() {
   useFocusReload(loadProperties);
 
   const phase = useLoadingState(loaded, list.length === 0);
+
+  // Pull-to-refresh: реален ръчен sync (mutex-нат в sync-runtime) + reload на
+  // списъка. Резултатът минава през toast-а от Част 1. Без Supabase — само
+  // локален reload, без toast за грешка.
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      if (isSupabaseConfigured) await syncNow({ notifySuccess: true, notifyError: true });
+      await loadProperties();
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   async function handleAdd(data: NewProperty) {
     // Затваряме модала и в двата случая (RN Modal крие toast-а отдолу), за да е
@@ -84,6 +100,9 @@ export default function PropertiesScreen() {
           renderItem={renderItem}
           contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={t.primary} colors={[t.primary]} />
+          }
           ListEmptyComponent={
             <EmptyState
               icon="🏠"
