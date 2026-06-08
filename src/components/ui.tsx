@@ -12,7 +12,7 @@ import { useToastStore, type ToastItem, type ToastType } from '@/store/toast';
  * Layout
  * ------------------------------------------------------------------ */
 
-export function Screen({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
+export function Screen({ children, style }: { children?: React.ReactNode; style?: StyleProp<ViewStyle> }) {
   const t = useTheme();
   return <View style={[{ flex: 1, backgroundColor: t.bg }, style]}>{children}</View>;
 }

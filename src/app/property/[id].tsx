@@ -14,8 +14,9 @@ import { toast } from '@/store/toast';
 import { schedulePaymentReminders } from '@/services/notifications';
 import {
   Screen, Card, Badge, IconBadge, SectionTitle, Button, Field, Input, ChipGroup,
-  InfoRow, Divider, EmptyState, Loading, SheetModal, useTheme, toneColors, spacing, radius, type Tone,
+  InfoRow, Divider, EmptyState, Loading, ErrorState, SheetModal, useTheme, toneColors, spacing, radius, type Tone,
 } from '@/components/ui';
+import { useDelayedFlag } from '@/hooks/use-loading-state';
 import {
   PROPERTY_TYPES, TYPE_LABELS, TYPE_ICONS, STATUS_LABELS, STATUS_TONE,
   METHOD_LABELS, PAYMENT_METHODS, PAYMENT_STATUSES, PAYMENT_STATUS_LABELS, PAYMENT_STATUS_TONE,
@@ -36,6 +37,7 @@ export default function PropertyDetailScreen() {
   const [propertyPayments, setPropertyPayments] = useState<Payment[]>([]);
   const [allTenants, setAllTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   const [addLeaseVisible, setAddLeaseVisible] = useState(false);
   const [paymentModal, setPaymentModal] = useState<PaymentModalState>(null);
@@ -43,31 +45,35 @@ export default function PropertyDetailScreen() {
 
   const loadData = useCallback(async () => {
     const uid = currentUserId();
-    if (!id || !uid) return;
+    if (!id || !uid) { setLoading(false); return; }
+    try {
+      setError(false);
+      const [prop] = await db.select().from(properties)
+        .where(ownedAndLive(properties, uid, eq(properties.id, id))).limit(1);
+      if (!prop) { router.back(); return; }
+      setProperty(prop);
 
-    const [prop] = await db.select().from(properties)
-      .where(ownedAndLive(properties, uid, eq(properties.id, id))).limit(1);
-    if (!prop) { router.back(); return; }
-    setProperty(prop);
+      const [lease] = await db.select().from(leases)
+        .where(ownedAndLive(leases, uid, eq(leases.propertyId, id), eq(leases.status, 'active')))
+        .limit(1);
+      setActiveLease(lease ?? null);
 
-    const [lease] = await db.select().from(leases)
-      .where(ownedAndLive(leases, uid, eq(leases.propertyId, id), eq(leases.status, 'active')))
-      .limit(1);
-    setActiveLease(lease ?? null);
-
-    if (lease) {
-      const [tenant] = await db.select().from(tenants)
-        .where(ownedAndLive(tenants, uid, eq(tenants.id, lease.tenantId))).limit(1);
-      setLeaseTenant(tenant ?? null);
-      const pays = await db.select().from(payments)
-        .where(ownedAndLive(payments, uid, eq(payments.leaseId, lease.id)));
-      setPropertyPayments(pays.sort((a, b) => b.period.localeCompare(a.period)));
-    } else {
-      setLeaseTenant(null);
-      setPropertyPayments([]);
+      if (lease) {
+        const [tenant] = await db.select().from(tenants)
+          .where(ownedAndLive(tenants, uid, eq(tenants.id, lease.tenantId))).limit(1);
+        setLeaseTenant(tenant ?? null);
+        const pays = await db.select().from(payments)
+          .where(ownedAndLive(payments, uid, eq(payments.leaseId, lease.id)));
+        setPropertyPayments(pays.sort((a, b) => b.period.localeCompare(a.period)));
+      } else {
+        setLeaseTenant(null);
+        setPropertyPayments([]);
+      }
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }, [id]);
 
   useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
@@ -236,7 +242,15 @@ export default function PropertyDetailScreen() {
     ]);
   }
 
-  if (loading) return <Loading />;
+  const showLoading = useDelayedFlag(loading);
+  if (loading) return showLoading ? <Loading /> : <Screen />;
+  if (error && !property) {
+    return (
+      <Screen>
+        <ErrorState message="Имотът не можа да се зареди." onRetry={loadData} />
+      </Screen>
+    );
+  }
   if (!property) return null;
 
   const currentPeriod = format(new Date(), 'yyyy-MM');

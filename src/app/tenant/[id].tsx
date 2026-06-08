@@ -11,8 +11,9 @@ import { softDeleteTenant } from '@/db/soft-delete';
 import { toast } from '@/store/toast';
 import {
   Screen, Card, Badge, Avatar, SectionTitle, Button, Field, Input,
-  InfoRow, Divider, EmptyState, Loading, SheetModal, useTheme, spacing, radius,
+  InfoRow, Divider, EmptyState, Loading, ErrorState, SheetModal, useTheme, spacing, radius,
 } from '@/components/ui';
+import { useDelayedFlag } from '@/hooks/use-loading-state';
 import {
   formatMoney, formatPeriod, formatDate, sumByCurrency,
   PAYMENT_STATUS_LABELS, PAYMENT_STATUS_TONE, METHOD_LABELS, type Currency,
@@ -30,40 +31,45 @@ export default function TenantDetailScreen() {
   const [payRows, setPayRows] = useState<PayRow[]>([]);
   const [hasAnyLease, setHasAnyLease] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [editVisible, setEditVisible] = useState(false);
 
   const loadData = useCallback(async () => {
     const uid = currentUserId();
-    if (!id || !uid) return;
+    if (!id || !uid) { setLoading(false); return; }
+    try {
+      setError(false);
+      const [tn] = await db.select().from(tenants)
+        .where(ownedAndLive(tenants, uid, eq(tenants.id, id))).limit(1);
+      if (!tn) { router.back(); return; }
+      setTenant(tn);
 
-    const [tn] = await db.select().from(tenants)
-      .where(ownedAndLive(tenants, uid, eq(tenants.id, id))).limit(1);
-    if (!tn) { router.back(); return; }
-    setTenant(tn);
+      const tLeases = await db.select().from(leases)
+        .where(ownedAndLive(leases, uid, eq(leases.tenantId, id)));
+      setHasAnyLease(tLeases.length > 0);
 
-    const tLeases = await db.select().from(leases)
-      .where(ownedAndLive(leases, uid, eq(leases.tenantId, id)));
-    setHasAnyLease(tLeases.length > 0);
+      const active = tLeases.find((l) => l.status === 'active') ?? null;
+      setActiveLease(active);
 
-    const active = tLeases.find((l) => l.status === 'active') ?? null;
-    setActiveLease(active);
+      const allProps = await db.select().from(properties).where(ownedAndLive(properties, uid));
+      const propName = (pid: string) => allProps.find((p) => p.id === pid)?.name ?? '—';
+      setActiveProperty(active ? allProps.find((p) => p.id === active.propertyId) ?? null : null);
 
-    const allProps = await db.select().from(properties).where(ownedAndLive(properties, uid));
-    const propName = (pid: string) => allProps.find((p) => p.id === pid)?.name ?? '—';
-    setActiveProperty(active ? allProps.find((p) => p.id === active.propertyId) ?? null : null);
-
-    const rows: PayRow[] = [];
-    for (const lease of tLeases) {
-      const pays = await db.select().from(payments)
-        .where(ownedAndLive(payments, uid, eq(payments.leaseId, lease.id)));
-      for (const payment of pays) {
-        rows.push({ payment, currency: lease.currency as Currency, propertyName: propName(lease.propertyId) });
+      const rows: PayRow[] = [];
+      for (const lease of tLeases) {
+        const pays = await db.select().from(payments)
+          .where(ownedAndLive(payments, uid, eq(payments.leaseId, lease.id)));
+        for (const payment of pays) {
+          rows.push({ payment, currency: lease.currency as Currency, propertyName: propName(lease.propertyId) });
+        }
       }
+      rows.sort((a, b) => b.payment.period.localeCompare(a.payment.period));
+      setPayRows(rows);
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
     }
-    rows.sort((a, b) => b.payment.period.localeCompare(a.payment.period));
-    setPayRows(rows);
-
-    setLoading(false);
   }, [id]);
 
   useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
@@ -106,7 +112,15 @@ export default function TenantDetailScreen() {
     ]);
   }
 
-  if (loading) return <Loading />;
+  const showLoading = useDelayedFlag(loading);
+  if (loading) return showLoading ? <Loading /> : <Screen />;
+  if (error && !tenant) {
+    return (
+      <Screen>
+        <ErrorState message="Наемателят не можа да се зареди." onRetry={loadData} />
+      </Screen>
+    );
+  }
   if (!tenant) return null;
 
   const paidTotals = payRows
