@@ -9,7 +9,7 @@ import { useAppStore } from '@/store';
 import { useFocusReload } from '@/hooks/use-focus-reload';
 import { useLoadingState } from '@/hooks/use-loading-state';
 import { Header, Card, ProgressBar, Button, EmptyState, Skeleton, ErrorState, useTheme, spacing, radius, shadow } from '@/components/ui';
-import { formatMoney, formatPeriod, type Currency } from '@/lib/domain';
+import { formatMoney, formatPeriod, isPaymentOverdue, type Currency } from '@/lib/domain';
 
 export default function DashboardScreen() {
   const t = useTheme();
@@ -72,10 +72,13 @@ export default function DashboardScreen() {
   };
   const totalOwed = (Object.values(owedBy) as number[]).reduce((s, n) => s + n, 0);
 
+  // Просрочие през клампнатия падеж (dueDateForPeriod): голото сравнение
+  // `dayOfMonth > paymentDay` никога не става true при paymentDay=31 в къс месец.
+  // Днешната дата е локална (както currentPeriod), не UTC.
+  const today = format(new Date(), 'yyyy-MM-dd');
   const overdueLeases = activeLeases.filter((lease) => {
-    const dayOfMonth = new Date().getDate();
     const hasPaid = currentPaid.some((p) => p.leaseId === lease.id);
-    return dayOfMonth > lease.paymentDay && !hasPaid;
+    return !hasPaid && isPaymentOverdue(currentPeriod, lease.paymentDay, today);
   });
 
   const monthLabel = formatPeriod(currentPeriod);
