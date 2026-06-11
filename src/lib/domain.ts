@@ -166,3 +166,13 @@ export function paymentDueDate(period: string, paymentDay: number): Date | null 
   const clampedDay = Math.min(paymentDay, daysInMonth(year, month));
   return new Date(`${m[1]}-${m[2]}-${String(clampedDay).padStart(2, '0')}`);
 }
+
+/**
+ * Допълнение към confirm() съобщението при изтриване на имот/наемател, който
+ * има история (договори/плащания). Изтриването е каскадно (soft-delete на
+ * договорите и плащанията), а справките и събраните суми четат само живи
+ * редове — затова предупреждаваме изрично. Без история текстът се пропуска.
+ */
+export function deleteCascadeWarning(name: string): string {
+  return `Това ще изтрие и всички договори и плащания към „${name}“. Историята на плащанията повече няма да се вижда в справките и събраните суми. Действието е необратимо.`;
+}

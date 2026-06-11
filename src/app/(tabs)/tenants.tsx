@@ -19,6 +19,7 @@ import {
   SheetModal, Field, Input, SwipeableRow, useTheme, spacing,
 } from '@/components/ui';
 import { useLoadingState } from '@/hooks/use-loading-state';
+import { deleteCascadeWarning } from '@/lib/domain';
 
 export default function TenantsScreen() {
   const t = useTheme();
@@ -89,10 +90,10 @@ export default function TenantsScreen() {
         toast.error('Изтриването е блокирано: има активен договор');
         return false;
       }
-      const extra = tenantLeases.length > 0 ? ' Историята на договорите и плащанията също ще бъде изтрита.' : '';
+      const base = `Сигурни ли сте, че искате да изтриете „${item.name}“?`;
       const ok = await confirm({
         title: 'Изтриване на наемател',
-        message: `Сигурни ли сте, че искате да изтриете „${item.name}“?${extra}`,
+        message: tenantLeases.length > 0 ? `${base} ${deleteCascadeWarning(item.name)}` : base,
         confirmLabel: 'Изтрий',
         tone: 'danger',
       });

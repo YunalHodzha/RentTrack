@@ -21,7 +21,7 @@ import { useDelayedFlag } from '@/hooks/use-loading-state';
 import {
   PROPERTY_TYPES, TYPE_LABELS, TYPE_ICONS, STATUS_LABELS, STATUS_TONE,
   METHOD_LABELS, PAYMENT_METHODS, PAYMENT_STATUSES, PAYMENT_STATUS_LABELS, PAYMENT_STATUS_TONE,
-  formatMoney, formatPeriod, formatDate, listPeriods, type Currency,
+  formatMoney, formatPeriod, formatDate, listPeriods, deleteCascadeWarning, type Currency,
 } from '@/lib/domain';
 
 type PaymentInput = { period: string; amount: number; method: 'cash' | 'bank' | 'other'; status: Payment['status']; notes: string | null };
@@ -221,14 +221,22 @@ export default function PropertyDetailScreen() {
       toast.error('Изтриването е блокирано: има активен договор');
       return;
     }
-    const ok = await confirm({
-      title: 'Изтриване на имот',
-      message: `Сигурни ли сте, че искате да изтриете „${property.name}“?`,
-      confirmLabel: 'Изтрий',
-      tone: 'danger',
-    });
-    if (!ok) return;
+    const uid = currentUserId();
+    if (!uid) return;
     try {
+      // История = поне един жив договор (минал или активен); плащанията висят
+      // от договорите, така че проверката покрива и тях.
+      const history = await db.select({ id: leases.id }).from(leases)
+        .where(ownedAndLive(leases, uid, eq(leases.propertyId, property.id)))
+        .limit(1);
+      const base = `Сигурни ли сте, че искате да изтриете „${property.name}“?`;
+      const ok = await confirm({
+        title: 'Изтриване на имот',
+        message: history.length > 0 ? `${base} ${deleteCascadeWarning(property.name)}` : base,
+        confirmLabel: 'Изтрий',
+        tone: 'danger',
+      });
+      if (!ok) return;
       await softDeleteProperty(db, property.id);
       toast.success('Имотът е изтрит');
       router.back();

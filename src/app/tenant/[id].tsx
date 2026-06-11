@@ -16,7 +16,7 @@ import {
 } from '@/components/ui';
 import { useDelayedFlag } from '@/hooks/use-loading-state';
 import {
-  formatMoney, formatPeriod, formatDate, sumByCurrency,
+  formatMoney, formatPeriod, formatDate, sumByCurrency, deleteCascadeWarning,
   PAYMENT_STATUS_LABELS, PAYMENT_STATUS_TONE, METHOD_LABELS, type Currency,
 } from '@/lib/domain';
 
@@ -94,10 +94,10 @@ export default function TenantDetailScreen() {
       toast.error('Изтриването е блокирано: има активен договор');
       return;
     }
-    const extra = hasAnyLease ? ' Историята на договорите и плащанията също ще бъде изтрита.' : '';
+    const base = `Сигурни ли сте, че искате да изтриете „${tenant.name}“?`;
     const ok = await confirm({
       title: 'Изтриване на наемател',
-      message: `Сигурни ли сте, че искате да изтриете „${tenant.name}“?${extra}`,
+      message: hasAnyLease ? `${base} ${deleteCascadeWarning(tenant.name)}` : base,
       confirmLabel: 'Изтрий',
       tone: 'danger',
     });

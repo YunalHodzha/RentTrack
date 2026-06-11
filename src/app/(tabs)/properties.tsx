@@ -19,7 +19,7 @@ import {
   SheetModal, Field, Input, ChipGroup, SwipeableRow, useTheme, spacing,
 } from '@/components/ui';
 import { useLoadingState } from '@/hooks/use-loading-state';
-import { PROPERTY_TYPES, TYPE_LABELS, TYPE_ICONS, STATUS_LABELS, STATUS_TONE } from '@/lib/domain';
+import { PROPERTY_TYPES, TYPE_LABELS, TYPE_ICONS, STATUS_LABELS, STATUS_TONE, deleteCascadeWarning } from '@/lib/domain';
 
 export default function PropertiesScreen() {
   const t = useTheme();
@@ -84,16 +84,16 @@ export default function PropertiesScreen() {
     const uid = currentUserId();
     if (!uid) return false;
     try {
-      const [active] = await db.select().from(leases)
-        .where(ownedAndLive(leases, uid, eq(leases.propertyId, item.id), eq(leases.status, 'active')))
-        .limit(1);
-      if (active) {
+      const propertyLeases = await db.select().from(leases)
+        .where(ownedAndLive(leases, uid, eq(leases.propertyId, item.id)));
+      if (propertyLeases.some((l) => l.status === 'active')) {
         toast.error('Изтриването е блокирано: има активен договор');
         return false;
       }
+      const base = `Сигурни ли сте, че искате да изтриете „${item.name}“?`;
       const ok = await confirm({
         title: 'Изтриване на имот',
-        message: `Сигурни ли сте, че искате да изтриете „${item.name}“?`,
+        message: propertyLeases.length > 0 ? `${base} ${deleteCascadeWarning(item.name)}` : base,
         confirmLabel: 'Изтрий',
         tone: 'danger',
       });
