@@ -1,4 +1,4 @@
-import type { Property, Payment } from '@/db/schema';
+import type { Property, Payment, Lease } from '@/db/schema';
 import type { Tone } from '@/theme';
 
 /** Property types in display order, with Bulgarian labels and icons. */
@@ -167,6 +167,47 @@ export function isPaymentOverdue(period: string, paymentDay: number, today: stri
 export function paymentDueDate(period: string, paymentDay: number): Date | null {
   const iso = dueDateForPeriod(period, paymentDay);
   return iso ? new Date(iso) : null;
+}
+
+/**
+ * Всички просрочени периоди на договор към `today` — от началото на договора
+ * (вкл.) до текущия месец (или до края на договора, ако е по-рано), чийто
+ * клампнат падеж (`dueDateForPeriod`) е минал и за които няма покриващо плащане.
+ *
+ * „Покриващо" = живо плащане със status 'paid' за периода — същата семантика
+ * като индикатора на таблото досега: 'partial' НЕ покрива (месецът още се
+ * дължи), 'pending'/'overdue' също. Подавай само живи редове (isNull(deletedAt)).
+ *
+ * Предплатените бъдещи месеци не са проблем — те имат 'paid' запис, а и без
+ * него падежът им още не е минал.
+ */
+export function overduePeriodsForLease(
+  lease: Pick<Lease, 'startDate' | 'endDate' | 'paymentDay'>,
+  paymentsForLease: Pick<Payment, 'period' | 'status'>[],
+  today: string = new Date().toISOString().split('T')[0],
+): string[] {
+  const start = lease.startDate.slice(0, 7);
+  if (!/^\d{4}-\d{2}$/.test(start)) return [];
+
+  // Горна граница: текущият месец, но не след края на договора (изтекъл, ала
+  // още маркиран active договор не трупа просрочия за месеци след endDate).
+  let end = today.slice(0, 7);
+  const leaseEnd = lease.endDate?.slice(0, 7);
+  if (leaseEnd && /^\d{4}-\d{2}$/.test(leaseEnd) && leaseEnd < end) end = leaseEnd;
+
+  const covered = new Set(
+    paymentsForLease.filter((p) => p.status === 'paid').map((p) => p.period),
+  );
+
+  const result: string[] = [];
+  // Таван от 1200 месеца (100 години) — защита от безкраен цикъл при повредени данни.
+  let guard = 0;
+  for (let period = start; period <= end && guard < 1200; period = addPeriodMonths(period, 1), guard++) {
+    if (!covered.has(period) && isPaymentOverdue(period, lease.paymentDay, today)) {
+      result.push(period);
+    }
+  }
+  return result;
 }
 
 /**

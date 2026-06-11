@@ -9,6 +9,7 @@ import {
   isPaymentOverdue,
   paymentDueDate,
   dueDateForPeriod,
+  overduePeriodsForLease,
 } from '../domain';
 
 describe('domain utilities', () => {
@@ -237,6 +238,59 @@ describe('domain utilities', () => {
     it('returns null for unparseable period', () => {
       expect(dueDateForPeriod('invalid', 15)).toBeNull();
       expect(dueDateForPeriod('2026', 15)).toBeNull();
+    });
+  });
+
+  describe('overduePeriodsForLease', () => {
+    const lease = (overrides: Partial<{ startDate: string; endDate: string | null; paymentDay: number }> = {}) => ({
+      startDate: '2026-01-01', endDate: null, paymentDay: 15, ...overrides,
+    });
+    const paid = (...periods: string[]) => periods.map((period) => ({ period, status: 'paid' as const }));
+
+    it('returns every unpaid past period since the lease start', () => {
+      // Към 11 юни падежът на юни (15-и) още не е минал → само януари–май.
+      expect(overduePeriodsForLease(lease(), [], '2026-06-11')).toEqual([
+        '2026-01', '2026-02', '2026-03', '2026-04', '2026-05',
+      ]);
+    });
+
+    it('skips covered periods and keeps only the unpaid gap', () => {
+      expect(
+        overduePeriodsForLease(lease(), paid('2026-01', '2026-02', '2026-04', '2026-05'), '2026-06-11'),
+      ).toEqual(['2026-03']);
+    });
+
+    it('returns empty when everything is paid', () => {
+      expect(
+        overduePeriodsForLease(lease(), paid('2026-01', '2026-02', '2026-03', '2026-04', '2026-05'), '2026-06-11'),
+      ).toEqual([]);
+    });
+
+    it('returns empty for a lease starting this month before its due day', () => {
+      expect(overduePeriodsForLease(lease({ startDate: '2026-06-01' }), [], '2026-06-11')).toEqual([]);
+    });
+
+    it('clamps paymentDay 31 around February', () => {
+      const l = lease({ paymentDay: 31 });
+      // На 28.02 само януари е минал падеж (февруарският клампнат падеж е същия ден).
+      expect(overduePeriodsForLease(l, [], '2026-02-28')).toEqual(['2026-01']);
+      // На 01.03 и февруари (падеж 28-и след клампване) вече е просрочен.
+      expect(overduePeriodsForLease(l, [], '2026-03-01')).toEqual(['2026-01', '2026-02']);
+    });
+
+    it('treats partial payments as NOT covering (month is still owed)', () => {
+      const payments = [{ period: '2026-03', status: 'partial' as const }, ...paid('2026-01', '2026-02', '2026-04', '2026-05')];
+      expect(overduePeriodsForLease(lease(), payments, '2026-06-11')).toEqual(['2026-03']);
+    });
+
+    it('stops at the lease end date for expired-but-active leases', () => {
+      expect(overduePeriodsForLease(lease({ endDate: '2026-03-31' }), [], '2026-06-11')).toEqual([
+        '2026-01', '2026-02', '2026-03',
+      ]);
+    });
+
+    it('returns empty for a malformed start date', () => {
+      expect(overduePeriodsForLease(lease({ startDate: 'invalid' }), [], '2026-06-11')).toEqual([]);
     });
   });
 

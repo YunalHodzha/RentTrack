@@ -9,7 +9,7 @@ import { useAppStore } from '@/store';
 import { useFocusReload } from '@/hooks/use-focus-reload';
 import { useLoadingState } from '@/hooks/use-loading-state';
 import { Header, Card, ProgressBar, Button, EmptyState, Skeleton, ErrorState, useTheme, spacing, radius, shadow } from '@/components/ui';
-import { formatMoney, formatPeriod, isPaymentOverdue, type Currency } from '@/lib/domain';
+import { formatMoney, formatPeriod, overduePeriodsForLease, type Currency } from '@/lib/domain';
 
 export default function DashboardScreen() {
   const t = useTheme();
@@ -72,14 +72,21 @@ export default function DashboardScreen() {
   };
   const totalOwed = (Object.values(owedBy) as number[]).reduce((s, n) => s + n, 0);
 
-  // Просрочие през клампнатия падеж (dueDateForPeriod): голото сравнение
-  // `dayOfMonth > paymentDay` никога не става true при paymentDay=31 в къс месец.
-  // Днешната дата е локална (както currentPeriod), не UTC.
+  // Просрочия през overduePeriodsForLease: покрива и МИНАЛИ неплатени месеци
+  // (неплатен януари не изчезва от индикатора на 1 февруари), с клампнат падеж
+  // за къси месеци. Плащанията са заредени веднъж (payList) и се групират по
+  // договор — без заявки в цикъл. Днешната дата е локална (както currentPeriod).
   const today = format(new Date(), 'yyyy-MM-dd');
-  const overdueLeases = activeLeases.filter((lease) => {
-    const hasPaid = currentPaid.some((p) => p.leaseId === lease.id);
-    return !hasPaid && isPaymentOverdue(currentPeriod, lease.paymentDay, today);
-  });
+  const paymentsByLease = new Map<string, typeof payList>();
+  for (const p of payList) {
+    const arr = paymentsByLease.get(p.leaseId);
+    if (arr) arr.push(p); else paymentsByLease.set(p.leaseId, [p]);
+  }
+  const overdueByLease = activeLeases
+    .map((lease) => overduePeriodsForLease(lease, paymentsByLease.get(lease.id) ?? [], today))
+    .filter((periods) => periods.length > 0);
+  const overdueLeaseCount = overdueByLease.length;
+  const overduePeriodCount = overdueByLease.reduce((sum, periods) => sum + periods.length, 0);
 
   const monthLabel = formatPeriod(currentPeriod);
   const monthCapitalized = monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1);
@@ -149,14 +156,15 @@ export default function DashboardScreen() {
         ) : null}
 
         {/* Overdue alert */}
-        {overdueLeases.length > 0 ? (
+        {overdueLeaseCount > 0 ? (
           <Card style={{ backgroundColor: t.warningSoft, borderColor: t.warning + '55' }}>
             <View style={{ flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' }}>
               <Text style={{ fontSize: 22 }}>⚠️</Text>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 15, fontWeight: '800', color: t.warning }}>Просрочени плащания</Text>
                 <Text style={{ fontSize: 13, color: t.warning, marginTop: 4, lineHeight: 19 }}>
-                  {overdueLeases.length} договор{overdueLeases.length > 1 ? 'а' : ''} с изминал ден на плащане без записано плащане за {monthCapitalized.toLowerCase()}.
+                  {overdueLeaseCount} договор{overdueLeaseCount === 1 ? '' : 'а'} с{' '}
+                  {overduePeriodCount === 1 ? '1 неплатен месец' : `${overduePeriodCount} неплатени месеца`} след падежа, вкл. минали периоди.
                 </Text>
               </View>
             </View>
