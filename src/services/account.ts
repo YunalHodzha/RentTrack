@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { db } from '@/db/client';
 import { wipeLocalAccountData } from '@/db/wipe';
+import { cancelScheduledReminders } from '@/services/notifications';
 import { isSupabaseConfigured, requireSupabase } from '@/services/supabase';
 import { withSyncPaused } from '@/services/sync-runtime';
 import { useAuthStore } from '@/store/auth';
@@ -25,6 +26,9 @@ export async function deleteAccount(): Promise<{ error: string | null }> {
     if (error) return { error: error.message };
 
     await wipeLocalAccountData(db, userId, AsyncStorage);
+    // Насрочените напомняния сочат към току-що изтрити данни — чистим ги
+    // заедно с локалния wipe.
+    await cancelScheduledReminders();
     await useAuthStore.getState().signOut();
     return { error: null };
   });

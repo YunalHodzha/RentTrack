@@ -70,6 +70,22 @@ export async function requestNotificationPermissions() {
 }
 
 /**
+ * Отменя всички насрочени напомняния в OS-а. Вика се при изход и при изтриване
+ * на акаунт — иначе известия за вече несъществуващи/чужди данни остават планирани
+ * до 3 месеца напред. При следващ вход root layout-ът ги възстановява
+ * (markOverduePayments → schedulePaymentReminders в ефекта по userId).
+ *
+ * Нарочно НЕ е в auth store-а: store-ът не може да импортира този модул без
+ * цикъл (auth → notifications → db/owner → auth), затова call site-овете
+ * (settings изход, services/account изтриване) го викат изрично.
+ */
+export async function cancelScheduledReminders() {
+  const Notifications = loadNotifications();
+  if (!Notifications) return;
+  await Notifications.cancelAllScheduledNotificationsAsync();
+}
+
+/**
  * Schedule payment reminders for upcoming payment dues.
  *
  * IMPORTANT LIMITATIONS:

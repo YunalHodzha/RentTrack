@@ -13,7 +13,7 @@ import { useSyncStore } from '@/store/sync';
 import { toast } from '@/store/toast';
 import { confirm } from '@/store/confirm';
 import { syncNow } from '@/services/sync-runtime';
-import { schedulePaymentReminders } from '@/services/notifications';
+import { schedulePaymentReminders, cancelScheduledReminders } from '@/services/notifications';
 import { exportDataAsJSON, exportDataAsCSV, importDataFromJSON } from '@/services/export';
 import { deleteAccount } from '@/services/account';
 import type { Currency } from '@/lib/domain';
@@ -89,6 +89,9 @@ export default function SettingsScreen() {
   async function handleSignOut() {
     if (await confirm({ title: 'Изход', message: 'Сигурни ли сте, че искате да излезете?', confirmLabel: 'Изход', tone: 'danger' })) {
       await signOut();
+      // Напомнянията са за-потребителски — без вписан потребител не бива да
+      // гърмят. Следващият вход ги пренасрочва (root layout ефекта по userId).
+      await cancelScheduledReminders();
       toast.success('Излязохте от профила');
     }
   }
