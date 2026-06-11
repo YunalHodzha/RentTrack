@@ -455,7 +455,7 @@ export function SheetModal({
             <View style={{ width: 48 }} />
           )}
         </View>
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <ScrollView
             contentContainerStyle={{ padding: spacing.xl, paddingBottom: 48 }}
             keyboardShouldPersistTaps="handled"

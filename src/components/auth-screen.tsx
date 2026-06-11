@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { View, Text, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { useEffect, useState } from 'react';
+import { View, Text, KeyboardAvoidingView, Platform, ScrollView, Keyboard } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen, Card, Field, Input, Button, useTheme, spacing } from '@/components/ui';
 import { useAuthStore } from '@/store/auth';
@@ -21,8 +21,17 @@ export function AuthScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  // При отворена клавиатура подравняваме формата отгоре (вместо центрирана), за да
+  // не остане полето за парола под клавиатурата на Android.
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
 
   const isSignup = mode === 'signup';
+
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardOpen(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardOpen(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   async function handleSubmit() {
     if (!isSupabaseConfigured) {
@@ -61,9 +70,9 @@ export function AuthScreen() {
 
   return (
     <Screen>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView
-          contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: spacing.xl, paddingTop: insets.top + spacing.xxl }}
+          contentContainerStyle={{ flexGrow: 1, justifyContent: keyboardOpen ? 'flex-start' : 'center', padding: spacing.xl, paddingTop: insets.top + spacing.xxl }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
 
