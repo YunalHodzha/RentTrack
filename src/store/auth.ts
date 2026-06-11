@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import * as Linking from 'expo-linking';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/services/supabase';
 import { useAppStore } from '@/store';
@@ -14,6 +15,8 @@ interface AuthStore {
   signUp: (email: string, password: string) => Promise<{ error: string | null }>;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
+  /** Изпраща имейл с линк за нова парола, водещ обратно в приложението. */
+  requestPasswordReset: (email: string) => Promise<{ error: string | null }>;
 }
 
 let subscribed = false;
@@ -50,6 +53,16 @@ export const useAuthStore = create<AuthStore>((set) => ({
   signIn: async (email, password) => {
     if (!supabase) return { error: 'Supabase не е конфигуриран.' };
     const { error } = await supabase.auth.signInWithPassword({ email, password });
+    return { error: error?.message ?? null };
+  },
+
+  requestPasswordReset: async (email) => {
+    if (!supabase) return { error: 'Supabase не е конфигуриран.' };
+    // createURL дава правилния deep link и в Expo Go (exp://.../--/reset-password),
+    // и в dev/production build (renttrack://reset-password). URL-ът трябва да е
+    // добавен в Supabase → Authentication → URL Configuration → Redirect URLs.
+    const redirectTo = Linking.createURL('/reset-password');
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
     return { error: error?.message ?? null };
   },
 

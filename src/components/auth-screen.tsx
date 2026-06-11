@@ -6,7 +6,7 @@ import { useAuthStore } from '@/store/auth';
 import { toast } from '@/store/toast';
 import { isSupabaseConfigured } from '@/services/supabase';
 
-type Mode = 'signin' | 'signup';
+type Mode = 'signin' | 'signup' | 'reset';
 
 /**
  * Full-screen auth gate. The app is locked behind sign-in (Phase 4B decision),
@@ -15,7 +15,7 @@ type Mode = 'signin' | 'signup';
 export function AuthScreen() {
   const t = useTheme();
   const insets = useSafeAreaInsets();
-  const { signIn, signUp } = useAuthStore();
+  const { signIn, signUp, requestPasswordReset } = useAuthStore();
 
   const [mode, setMode] = useState<Mode>('signin');
   const [email, setEmail] = useState('');
@@ -26,6 +26,7 @@ export function AuthScreen() {
   const [keyboardOpen, setKeyboardOpen] = useState(false);
 
   const isSignup = mode === 'signup';
+  const isReset = mode === 'reset';
 
   useEffect(() => {
     const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardOpen(true));
@@ -43,6 +44,25 @@ export function AuthScreen() {
       toast.error('Въведете валиден имейл адрес');
       return;
     }
+
+    if (isReset) {
+      setSubmitting(true);
+      try {
+        const { error } = await requestPasswordReset(trimmedEmail);
+        if (error) {
+          // Грешка тук е транспортна/rate limit — Supabase не издава дали имейлът
+          // съществува, и ние също не бива (затова неутралното съобщение долу).
+          toast.error('Неуспешно изпращане. Проверете връзката и опитайте отново.');
+        } else {
+          toast.info('Ако съществува акаунт с този имейл, изпратихме линк за нова парола');
+          setMode('signin');
+        }
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
     if (password.length < 6) {
       toast.error('Паролата трябва да е поне 6 символа');
       return;
@@ -80,7 +100,7 @@ export function AuthScreen() {
             <Text style={{ fontSize: 34 }}>🏠</Text>
             <Text style={{ fontSize: 26, fontWeight: '800', color: t.text, marginTop: spacing.sm }}>RentTrack</Text>
             <Text style={{ fontSize: 14, color: t.textSecondary, marginTop: 4 }}>
-              {isSignup ? 'Създайте акаунт' : 'Влезте в акаунта си'}
+              {isReset ? 'Възстановяване на парола' : isSignup ? 'Създайте акаунт' : 'Влезте в акаунта си'}
             </Text>
           </View>
 
@@ -96,19 +116,33 @@ export function AuthScreen() {
                 textContentType="emailAddress"
               />
             </Field>
-            <Field label="Парола" hint={isSignup ? 'Поне 6 символа' : undefined}>
-              <Input
-                value={password}
-                onChangeText={setPassword}
-                placeholder="••••••••"
-                secureTextEntry
-                autoCapitalize="none"
-                textContentType={isSignup ? 'newPassword' : 'password'}
-              />
-            </Field>
+            {isReset ? (
+              <Text style={{ fontSize: 13, color: t.textMuted, marginBottom: spacing.lg, lineHeight: 18 }}>
+                Ще изпратим линк за нова парола на посочения имейл.
+              </Text>
+            ) : (
+              <Field label="Парола" hint={isSignup ? 'Поне 6 символа' : undefined}>
+                <Input
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="••••••••"
+                  secureTextEntry
+                  autoCapitalize="none"
+                  textContentType={isSignup ? 'newPassword' : 'password'}
+                />
+              </Field>
+            )}
+
+            {mode === 'signin' ? (
+              <Text
+                onPress={() => setMode('reset')}
+                style={{ fontSize: 13, fontWeight: '700', color: t.primary, textAlign: 'right', marginBottom: spacing.lg }}>
+                Забравена парола?
+              </Text>
+            ) : null}
 
             <Button
-              label={submitting ? 'Моля, изчакайте…' : isSignup ? 'Регистрация' : 'Вход'}
+              label={submitting ? 'Моля, изчакайте…' : isReset ? 'Изпрати линк' : isSignup ? 'Регистрация' : 'Вход'}
               onPress={handleSubmit}
               disabled={submitting}
               fullWidth
@@ -116,14 +150,24 @@ export function AuthScreen() {
           </Card>
 
           <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: spacing.xl }}>
-            <Text style={{ fontSize: 14, color: t.textSecondary }}>
-              {isSignup ? 'Вече имате акаунт? ' : 'Нямате акаунт? '}
-            </Text>
-            <Text
-              onPress={() => setMode(isSignup ? 'signin' : 'signup')}
-              style={{ fontSize: 14, fontWeight: '800', color: t.primary }}>
-              {isSignup ? 'Вход' : 'Регистрация'}
-            </Text>
+            {isReset ? (
+              <Text
+                onPress={() => setMode('signin')}
+                style={{ fontSize: 14, fontWeight: '800', color: t.primary }}>
+                Обратно към вход
+              </Text>
+            ) : (
+              <>
+                <Text style={{ fontSize: 14, color: t.textSecondary }}>
+                  {isSignup ? 'Вече имате акаунт? ' : 'Нямате акаунт? '}
+                </Text>
+                <Text
+                  onPress={() => setMode(isSignup ? 'signin' : 'signup')}
+                  style={{ fontSize: 14, fontWeight: '800', color: t.primary }}>
+                  {isSignup ? 'Вход' : 'Регистрация'}
+                </Text>
+              </>
+            )}
           </View>
 
           {!isSupabaseConfigured ? (
