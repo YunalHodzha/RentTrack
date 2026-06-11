@@ -7,6 +7,7 @@ import { useAuthStore } from '@/store/auth';
 import { useSyncStore } from '@/store/sync';
 import { toast } from '@/store/toast';
 import { isSupabaseConfigured, requireSupabase } from '@/services/supabase';
+import { reportSyncError } from '@/services/sentry';
 import { runSync, type CursorStore, type SyncRemote, type TableName } from '@/services/sync';
 
 const SYNC_INTERVAL_MS = 60_000;
@@ -84,6 +85,10 @@ export async function syncNow(options: { notifySuccess?: boolean; notifyError?: 
     if (options.notifySuccess) toast.success('Данните са синхронизирани');
   } catch (e) {
     useSyncStore.getState().markError(e instanceof Error ? e.message : 'Неуспешна синхронизация');
+    // Тихите фонови провали отиват в Sentry, но: мрежовите грешки изобщо не
+    // (очаквани при offline), а останалите — дедуплицирани веднъж на сесия
+    // (интервалът е 60s; без това едно устройство праща стотици еднакви събития).
+    reportSyncError(e);
     if (options.notifyError) toast.error('Няма връзка — промените ще се синхронизират по-късно');
   } finally {
     inFlight = false;

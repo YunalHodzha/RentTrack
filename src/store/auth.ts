@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import * as Linking from 'expo-linking';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/services/supabase';
+import { setSentryUser } from '@/services/sentry';
 import { useAppStore } from '@/store';
 
 interface AuthStore {
@@ -35,11 +36,14 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
     const { data } = await supabase.auth.getSession();
     set({ session: data.session, user: data.session?.user ?? null, initializing: false });
+    // Crash reporting контекст: само userId (без имейл — PII политика в sentry.ts).
+    setSentryUser(data.session?.user?.id ?? null);
 
     if (!subscribed) {
       subscribed = true;
       supabase.auth.onAuthStateChange((_event, session) => {
         set({ session, user: session?.user ?? null });
+        setSentryUser(session?.user?.id ?? null);
       });
     }
   },

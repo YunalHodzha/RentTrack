@@ -1,8 +1,9 @@
 import '../global.css';
 import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, type ErrorBoundaryProps } from 'expo-router';
 import * as Linking from 'expo-linking';
+import * as Sentry from '@sentry/react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -13,6 +14,7 @@ import { requestNotificationPermissions, schedulePaymentReminders, setupNotifica
 import { useSettingsStore } from '@/store/settings';
 import { useAuthStore } from '@/store/auth';
 import { setupSyncTriggers } from '@/services/sync-runtime';
+import { initSentry, reportError } from '@/services/sentry';
 import { Loading, ToastHost, ConfirmHost, ErrorState } from '@/components/ui';
 import { AuthScreen } from '@/components/auth-screen';
 import { ResetPasswordScreen } from '@/components/reset-password-screen';
@@ -20,7 +22,29 @@ import { useTheme } from '@/theme';
 
 SplashScreen.preventAutoHideAsync();
 
-export default function RootLayout() {
+// Възможно най-рано, преди първия render. Без EXPO_PUBLIC_SENTRY_DSN е no-op.
+initSentry();
+
+/**
+ * Render грешка под root-а (expo-router error boundary): приятелски екран
+ * вместо бял/червен. Грешката отива в Sentry; „Рестартирай" пробва наново.
+ */
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  const t = useTheme();
+  useEffect(() => { reportError(error); }, [error]);
+  return (
+    <View style={{ flex: 1, backgroundColor: t.bg, justifyContent: 'center' }}>
+      <ErrorState
+        title="Нещо се обърка"
+        message="Възникна неочаквана грешка. Опитайте да рестартирате."
+        onRetry={() => { void retry(); }}
+        retryLabel="Рестартирай"
+      />
+    </View>
+  );
+}
+
+function RootLayout() {
   const [dbReady, setDbReady] = useState(false);
   const [initError, setInitError] = useState(false);
   const { session, initializing: authInitializing } = useAuthStore();
@@ -36,7 +60,7 @@ export default function RootLayout() {
       .then(() => requestNotificationPermissions())
       .then(() => initAuth())
       .then(() => setDbReady(true))
-      .catch((e) => { console.error(e); setInitError(true); })
+      .catch((e) => { console.error(e); reportError(e); setInitError(true); })
       .finally(() => SplashScreen.hideAsync());
   }, []);
 
@@ -110,3 +134,7 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+
+// Sentry.wrap закача touch/lifecycle инструментацията към root компонента.
+// Без DSN (initSentry no-op) обвивката е безвредна.
+export default Sentry.wrap(RootLayout);
