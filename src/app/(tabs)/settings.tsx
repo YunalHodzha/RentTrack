@@ -13,6 +13,7 @@ import { useSyncStore } from '@/store/sync';
 import { toast } from '@/store/toast';
 import { confirm } from '@/store/confirm';
 import { syncNow, withSyncPaused } from '@/services/sync-runtime';
+import { isSupabaseConfigured } from '@/services/supabase';
 import { schedulePaymentReminders, cancelScheduledReminders } from '@/services/notifications';
 import { exportDataAsJSON, exportDataAsCSV } from '@/services/export';
 import { parseImportFile, applyImport } from '@/services/import';
@@ -191,23 +192,32 @@ export default function SettingsScreen() {
 
         <SectionTitle>Синхронизация</SectionTitle>
         <Card style={{ marginBottom: spacing.lg }}>
-          <Text style={{ fontSize: 13, color: t.textSecondary }}>
-            {syncStatus === 'syncing'
-              ? 'Синхронизиране…'
-              : syncStatus === 'error'
-                ? `Грешка: ${syncError ?? 'неуспешна синхронизация'}`
-                : lastSyncedAt
-                  ? `Последна синхронизация: ${new Date(lastSyncedAt).toLocaleString('bg-BG')}`
-                  : 'Все още няма синхронизация'}
-          </Text>
-          <Button
-            label={syncStatus === 'syncing' ? 'Синхронизиране…' : 'Синхронизирай сега'}
-            variant="secondary"
-            onPress={() => { syncNow({ notifySuccess: true, notifyError: true }); }}
-            disabled={syncStatus === 'syncing'}
-            fullWidth
-            style={{ marginTop: spacing.md }}
-          />
+          {isSupabaseConfigured ? (
+            <>
+              <Text style={{ fontSize: 13, color: t.textSecondary }}>
+                {syncStatus === 'syncing'
+                  ? 'Синхронизиране…'
+                  : syncStatus === 'error'
+                    ? `Грешка: ${syncError ?? 'неуспешна синхронизация'}`
+                    : lastSyncedAt
+                      ? `Последна синхронизация: ${new Date(lastSyncedAt).toLocaleString('bg-BG')}`
+                      : 'Все още няма синхронизация'}
+              </Text>
+              <Button
+                label={syncStatus === 'syncing' ? 'Синхронизиране…' : 'Синхронизирай сега'}
+                variant="secondary"
+                onPress={() => { syncNow({ notifySuccess: true, notifyError: true }); }}
+                disabled={syncStatus === 'syncing'}
+                fullWidth
+                style={{ marginTop: spacing.md }}
+              />
+            </>
+          ) : (
+            <Text style={{ fontSize: 13, color: t.textSecondary, lineHeight: 19 }}>
+              Облачната синхронизация не е конфигурирана. Данните се пазят само на това устройство.
+              За включване задайте Supabase ключовете в .env (виж .env.example).
+            </Text>
+          )}
         </Card>
 
         <SectionTitle>Валута</SectionTitle>

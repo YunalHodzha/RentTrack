@@ -395,7 +395,12 @@ export default function PropertyDetailScreen() {
             </View>
           ) : activeLease ? (
             <View style={{ marginTop: spacing.lg }}>
-              <EmptyState icon="🧾" title="Няма записани плащания" message="Натиснете „Запиши плащане“, за да добавите първото." />
+              <EmptyState
+                icon="🧾"
+                title="Няма записани плащания"
+                message="Тук ще се вижда историята на наема по месеци."
+                action={<Button label="Запиши плащане" onPress={() => setPaymentModal({ mode: 'add' })} />}
+              />
             </View>
           ) : null}
 

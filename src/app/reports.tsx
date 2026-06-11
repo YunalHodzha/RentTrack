@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { View, Text, ScrollView } from 'react-native';
 import { Stack } from 'expo-router';
 import {
-  Screen, Card, SectionTitle, Button, Skeleton, ErrorState, useTheme, spacing, radius, toneColors,
+  Screen, Card, SectionTitle, Button, Skeleton, EmptyState, ErrorState, useTheme, spacing, radius, toneColors,
 } from '@/components/ui';
 import { useDelayedFlag } from '@/hooks/use-loading-state';
 import { formatMoney, formatPeriod } from '@/lib/domain';
@@ -132,7 +132,9 @@ export default function ReportsScreen() {
                     </Card>
                   ))}
                 </>
-              ) : null}
+              ) : (
+                <EmptyState icon="📊" title="Изберете година" message="Изберете година със стрелките и натиснете „Зареди справка“." />
+              )}
             </>
           ) : (
             <>
@@ -194,7 +196,9 @@ export default function ReportsScreen() {
                     </Card>
                   ))}
                 </>
-              ) : null}
+              ) : (
+                <EmptyState icon="📊" title="Изберете месец" message="Изберете месец със стрелките и натиснете „Зареди справка“." />
+              )}
             </>
           )}
         </ScrollView>

@@ -230,7 +230,14 @@ export default function TenantDetailScreen() {
             </View>
           ) : (
             <View style={{ marginTop: spacing.lg }}>
-              <EmptyState icon="🧾" title="Няма записани плащания" message="Плащанията се записват от детайлния екран на имота." />
+              <EmptyState
+                icon="🧾"
+                title="Няма записани плащания"
+                message="Плащанията се записват от детайлния екран на имота."
+                action={activeProperty ? (
+                  <Button label="Към имота" variant="secondary" onPress={() => router.push(`/property/${activeProperty.id}`)} />
+                ) : undefined}
+              />
             </View>
           )}
 

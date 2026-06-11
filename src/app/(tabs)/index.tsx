@@ -1,7 +1,8 @@
-import { useCallback, useState } from 'react';
-import { View, Text, ScrollView } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
 import { format } from 'date-fns';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { db } from '@/db/client';
 import { properties, leases, payments } from '@/db/schema';
 import { ownedAndLive, currentUserId } from '@/db/owner';
@@ -10,6 +11,7 @@ import { useFocusReload } from '@/hooks/use-focus-reload';
 import { useLoadingState } from '@/hooks/use-loading-state';
 import { Header, Card, ProgressBar, Button, EmptyState, Skeleton, ErrorState, useTheme, spacing, radius, shadow } from '@/components/ui';
 import { formatMoney, formatPeriod, overduePeriodsForLease, type Currency } from '@/lib/domain';
+import { onboardingSteps, type OnboardingStep } from '@/lib/onboarding';
 
 export default function DashboardScreen() {
   const t = useTheme();
@@ -40,6 +42,28 @@ export default function DashboardScreen() {
   useFocusReload(loadAll);
 
   const phase = useLoadingState(loaded, props.length === 0);
+
+  // „Първи стъпки": видима, докато стъпките не са готови, освен ако е скрита
+  // ръчно (✕ → флаг в AsyncStorage, отделен за всеки потребител). null = флагът
+  // още се чете → не рисуваме нищо (без премигване).
+  const uid = currentUserId();
+  const [onboardingHidden, setOnboardingHidden] = useState<boolean | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    if (!uid) { setOnboardingHidden(true); return; }
+    AsyncStorage.getItem(`renttrack_onboarding_hidden_${uid}`)
+      .then((v) => { if (!cancelled) setOnboardingHidden(v === '1'); })
+      .catch(() => { if (!cancelled) setOnboardingHidden(false); });
+    return () => { cancelled = true; };
+  }, [uid]);
+
+  function hideOnboarding() {
+    setOnboardingHidden(true);
+    if (uid) void AsyncStorage.setItem(`renttrack_onboarding_hidden_${uid}`, '1');
+  }
+
+  const steps = onboardingSteps({ properties: props.length, leases: leaseList.length, payments: payList.length });
+  const onboardingVisible = loaded && onboardingHidden === false && steps.some((s) => !s.done);
 
   const currentPeriod = format(new Date(), 'yyyy-MM');
   const activeLeases = leaseList.filter((l) => l.status === 'active');
@@ -127,6 +151,9 @@ export default function DashboardScreen() {
           </View>
         </View>
 
+        {/* First steps (onboarding) */}
+        {onboardingVisible ? <OnboardingCard steps={steps} onHide={hideOnboarding} /> : null}
+
         {/* Collected / outstanding this month */}
         <View style={{ flexDirection: 'row', gap: spacing.md }}>
           <StatTile label="Събрано" sub={monthCapitalized} value={fmtMap(collectedBy)} tone="success" />
@@ -171,19 +198,70 @@ export default function DashboardScreen() {
           </Card>
         ) : null}
 
-        {/* First-run empty state */}
-        {props.length === 0 ? (
+        {/* First-run empty state — само ако картата „Първи стъпки" е скрита,
+            иначе двете се дублират. */}
+        {props.length === 0 && !onboardingVisible ? (
           <View style={{ marginTop: spacing.xxl }}>
             <EmptyState
               icon="🏠"
               title="Добре дошли в RentTrack"
               message="Започнете, като добавите първия си имот в раздел „Имоти“."
+              action={<Button label="Добави имот" onPress={() => router.push('/(tabs)/properties')} />}
             />
           </View>
         ) : null}
       </View>
       )}
     </ScrollView>
+  );
+}
+
+/**
+ * Карта „Първи стъпки" за нов потребител: три стъпки с отметки от реалните
+ * данни. Незавършените са натискаеми и водят към мястото на действието —
+ * без навигационна машина, просто преход към съответния таб.
+ */
+function OnboardingCard({ steps, onHide }: { steps: OnboardingStep[]; onHide: () => void }) {
+  const t = useTheme();
+  const doneCount = steps.filter((s) => s.done).length;
+  // Договорите се създават от екрана на имота, но първо трябва наемател —
+  // затова стъпка 2 води към таб „Наематели".
+  const targets: Record<OnboardingStep['key'], { route: '/(tabs)/properties' | '/(tabs)/tenants'; hint: string }> = {
+    property: { route: '/(tabs)/properties', hint: 'Раздел „Имоти“ → бутон +' },
+    lease: { route: '/(tabs)/tenants', hint: 'Добавете наемател, после договор от екрана на имота' },
+    payment: { route: '/(tabs)/properties', hint: 'Записва се от екрана на имота' },
+  };
+  return (
+    <Card>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 15, fontWeight: '800', color: t.text }}>Първи стъпки</Text>
+        <TouchableOpacity onPress={onHide} hitSlop={10} accessibilityRole="button" accessibilityLabel="Скрий първите стъпки">
+          <Text style={{ fontSize: 15, fontWeight: '700', color: t.textMuted }}>✕</Text>
+        </TouchableOpacity>
+      </View>
+      <View style={{ marginTop: spacing.md, marginBottom: spacing.sm }}>
+        <ProgressBar value={(doneCount / steps.length) * 100} tone={doneCount > 0 ? 'success' : 'primary'} />
+      </View>
+      {steps.map((step) => (
+        <TouchableOpacity
+          key={step.key}
+          disabled={step.done}
+          activeOpacity={0.7}
+          onPress={() => router.push(targets[step.key].route)}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 9 }}>
+          <Text style={{ fontSize: 17 }}>{step.done ? '✅' : '⬜'}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: step.done ? t.textMuted : t.text }}>
+              {step.title}
+            </Text>
+            {!step.done ? (
+              <Text style={{ fontSize: 12, color: t.textMuted, marginTop: 1 }}>{targets[step.key].hint}</Text>
+            ) : null}
+          </View>
+          {!step.done ? <Text style={{ fontSize: 18, fontWeight: '700', color: t.primary }}>›</Text> : null}
+        </TouchableOpacity>
+      ))}
+    </Card>
   );
 }
 
