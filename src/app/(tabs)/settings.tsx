@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { View, Text, ScrollView, Share } from 'react-native';
+import { View, Text, ScrollView, Share, TouchableOpacity } from 'react-native';
 import { useFocusEffect } from '@react-navigation/core';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
@@ -36,6 +36,7 @@ export default function SettingsScreen() {
   const [localDaysBefore, setLocalDaysBefore] = useState(String(notificationDaysBefore));
   const [deleteAccountVisible, setDeleteAccountVisible] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -262,12 +263,26 @@ export default function SettingsScreen() {
           </View>
         </Card>
 
-        <SectionTitle>Възстановяване на данни</SectionTitle>
+        {/* Аварийните/рядко ползваните функции стоят свити, за да не седят
+            наравно с ежедневните настройки. Логиката на импорта не е пипана. */}
+        <SectionTitle>Разширени</SectionTitle>
         <Card style={{ marginBottom: spacing.lg }}>
-          <Text style={{ fontSize: 13, color: t.textMuted, marginBottom: spacing.lg }}>
-            Внесете данни от JSON архив. Това ще замени всички текущи данни в приложението и в облака.
-          </Text>
-          <Button label="Внеси от JSON" variant="secondary" onPress={handleImportJSON} fullWidth />
+          <TouchableOpacity
+            onPress={() => setAdvancedOpen((v) => !v)}
+            accessibilityRole="button"
+            accessibilityLabel={advancedOpen ? 'Скрий разширените настройки' : 'Покажи разширените настройки'}
+            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: t.text }}>Възстановяване от архив</Text>
+            <Text style={{ fontSize: 14, fontWeight: '800', color: t.textMuted }}>{advancedOpen ? '▾' : '▸'}</Text>
+          </TouchableOpacity>
+          {advancedOpen ? (
+            <View style={{ marginTop: spacing.lg }}>
+              <Button label="Внеси от JSON" variant="secondary" onPress={handleImportJSON} fullWidth />
+              <Text style={{ fontSize: 12, color: t.textMuted, marginTop: spacing.md, lineHeight: 17 }}>
+                Замества всички данни с тези от файла. Ползва се за възстановяване от архив.
+              </Text>
+            </View>
+          ) : null}
         </Card>
 
         <SectionTitle>Опасна зона</SectionTitle>
