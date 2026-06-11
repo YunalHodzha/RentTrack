@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { View, Text, FlatList, Alert, RefreshControl } from 'react-native';
+import { View, Text, FlatList, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
 import { db } from '@/db/client';
 import { tenants, leases } from '@/db/schema';
@@ -188,11 +188,12 @@ function AddTenantModal({ visible, onClose, onSave }: {
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [notes, setNotes] = useState('');
+  const [nameError, setNameError] = useState<string | undefined>();
 
-  function reset() { setName(''); setPhone(''); setEmail(''); setNotes(''); }
+  function reset() { setName(''); setPhone(''); setEmail(''); setNotes(''); setNameError(undefined); }
 
   function handleSave() {
-    if (!name.trim()) { Alert.alert('Задължително', 'Моля, въведете името на наемателя.'); return; }
+    if (!name.trim()) { setNameError('Въведете име'); return; }
     onSave({ id: generateId(), name: name.trim(), phone: phone.trim() || null, email: email.trim() || null, notes: notes.trim() || null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     reset();
   }
@@ -201,8 +202,8 @@ function AddTenantModal({ visible, onClose, onSave }: {
 
   return (
     <SheetModal visible={visible} onClose={handleClose} onSave={handleSave} title="Нов наемател">
-      <Field label="Име *">
-        <Input value={name} onChangeText={setName} placeholder="Пълно име" />
+      <Field label="Име *" error={nameError}>
+        <Input value={name} onChangeText={(v) => { setName(v); setNameError(undefined); }} placeholder="Пълно име" error={!!nameError} />
       </Field>
       <Field label="Телефон">
         <Input value={phone} onChangeText={setPhone} placeholder="По избор" keyboardType="phone-pad" />

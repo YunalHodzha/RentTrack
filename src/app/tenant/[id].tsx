@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert, Linking } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Linking } from 'react-native';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/core';
 import { eq } from 'drizzle-orm';
@@ -269,16 +269,17 @@ function EditTenantModal({ tenant, onClose, onSave }: {
   const [phone, setPhone] = useState(tenant.phone ?? '');
   const [email, setEmail] = useState(tenant.email ?? '');
   const [notes, setNotes] = useState(tenant.notes ?? '');
+  const [nameError, setNameError] = useState<string | undefined>();
 
   function handleSave() {
-    if (!name.trim()) { Alert.alert('Задължително', 'Моля, въведете името на наемателя.'); return; }
+    if (!name.trim()) { setNameError('Въведете име'); return; }
     onSave({ name: name.trim(), phone: phone.trim() || null, email: email.trim() || null, notes: notes.trim() || null });
   }
 
   return (
     <SheetModal visible onClose={onClose} onSave={handleSave} title="Редактиране на наемател">
-      <Field label="Име *">
-        <Input value={name} onChangeText={setName} placeholder="Пълно име" />
+      <Field label="Име *" error={nameError}>
+        <Input value={name} onChangeText={(v) => { setName(v); setNameError(undefined); }} placeholder="Пълно име" error={!!nameError} />
       </Field>
       <Field label="Телефон">
         <Input value={phone} onChangeText={setPhone} placeholder="По избор" keyboardType="phone-pad" />

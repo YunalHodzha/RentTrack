@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/core';
 import { eq } from 'drizzle-orm';
@@ -469,6 +469,7 @@ function AddLeaseModal({ visible, tenantList, onClose, onSave, onCreateTenant }:
   const [endDate, setEndDate] = useState<string | null>(null);
   const [depositAmount, setDepositAmount] = useState('');
   const [notes, setNotes] = useState('');
+  const [errors, setErrors] = useState<{ tenant?: string; amount?: string; day?: string; startDate?: string; endDate?: string; newName?: string }>({});
 
   // Inline "new tenant" mini-form state.
   const [showNewTenant, setShowNewTenant] = useState(false);
@@ -476,39 +477,48 @@ function AddLeaseModal({ visible, tenantList, onClose, onSave, onCreateTenant }:
   const [newPhone, setNewPhone] = useState('');
   const [creating, setCreating] = useState(false);
 
-  function resetNewTenant() { setShowNewTenant(false); setNewName(''); setNewPhone(''); }
+  function clearError(key: keyof typeof errors) {
+    setErrors((e) => (e[key] ? { ...e, [key]: undefined } : e));
+  }
+
+  function resetNewTenant() { setShowNewTenant(false); setNewName(''); setNewPhone(''); clearError('newName'); }
 
   function reset() {
     setSelectedTenantId(null); setRentAmount(''); setCurrency('EUR');
     setPaymentDay('1'); setStartDate(format(new Date(), 'yyyy-MM-dd')); setEndDate(null);
     setDepositAmount(''); setNotes('');
+    setErrors({});
     resetNewTenant();
   }
 
   async function handleCreateTenant() {
-    if (!newName.trim()) { Alert.alert('Задължително', 'Моля, въведете името на наемателя.'); return; }
+    if (!newName.trim()) { setErrors((e) => ({ ...e, newName: 'Въведете име' })); return; }
     setCreating(true);
     try {
       const tenant = await onCreateTenant({ name: newName.trim(), phone: newPhone.trim() || null });
       setSelectedTenantId(tenant.id);
+      clearError('tenant');
       resetNewTenant();
     } catch {
-      Alert.alert('Грешка', 'Неуспешно добавяне на наемател.');
+      // Toast не се вижда над отворен SheetModal, затова грешката е inline.
+      setErrors((e) => ({ ...e, newName: 'Неуспешно добавяне на наемател' }));
     } finally {
       setCreating(false);
     }
   }
 
   function handleSave() {
-    if (!selectedTenantId) { Alert.alert('Задължително', 'Моля, изберете наемател.'); return; }
+    const next: typeof errors = {};
+    if (!selectedTenantId) next.tenant = 'Изберете наемател';
     const amount = parseFloat(rentAmount);
-    if (!rentAmount || isNaN(amount) || amount <= 0) { Alert.alert('Задължително', 'Моля, въведете валидна наемна сума.'); return; }
+    if (!rentAmount || isNaN(amount) || amount <= 0) next.amount = 'Въведете валидна сума';
     const day = parseInt(paymentDay, 10);
-    if (isNaN(day) || day < 1 || day > 31) { Alert.alert('Задължително', 'Денят за плащане трябва да е от 1 до 31.'); return; }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) { Alert.alert('Задължително', 'Въведете дата във формат ГГГГ-ММ-ДД.'); return; }
-    if (endDate && endDate < startDate) { Alert.alert('Невалидна дата', 'Крайната дата не може да е преди началната.'); return; }
+    if (isNaN(day) || day < 1 || day > 31) next.day = 'Денят трябва да е между 1 и 31';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) next.startDate = 'Изберете начална дата';
+    if (endDate && endDate < startDate) next.endDate = 'Крайната дата не може да е преди началната';
+    if (Object.values(next).some(Boolean)) { setErrors(next); return; }
     const deposit = depositAmount ? parseFloat(depositAmount) : null;
-    onSave({ tenantId: selectedTenantId, rentAmount: amount, currency, paymentDay: day, startDate, endDate, depositAmount: deposit && !isNaN(deposit) ? deposit : null, notes: notes.trim() || null });
+    onSave({ tenantId: selectedTenantId!, rentAmount: amount, currency, paymentDay: day, startDate, endDate, depositAmount: deposit && !isNaN(deposit) ? deposit : null, notes: notes.trim() || null });
     reset();
   }
 
@@ -516,7 +526,7 @@ function AddLeaseModal({ visible, tenantList, onClose, onSave, onCreateTenant }:
 
   return (
     <SheetModal visible={visible} onClose={handleClose} onSave={handleSave} title="Нов договор">
-      <Field label="Наемател *">
+      <Field label="Наемател *" error={errors.tenant}>
         <View style={{ gap: spacing.sm }}>
           {tenantList.map((tenant) => {
             const active = selectedTenantId === tenant.id;
@@ -524,7 +534,7 @@ function AddLeaseModal({ visible, tenantList, onClose, onSave, onCreateTenant }:
               <TouchableOpacity
                 key={tenant.id}
                 activeOpacity={0.8}
-                onPress={() => setSelectedTenantId(tenant.id)}
+                onPress={() => { setSelectedTenantId(tenant.id); clearError('tenant'); }}
                 style={{
                   padding: 14, borderRadius: radius.md,
                   backgroundColor: active ? t.primarySoft : t.inputBg,
@@ -542,7 +552,10 @@ function AddLeaseModal({ visible, tenantList, onClose, onSave, onCreateTenant }:
 
           {showNewTenant ? (
             <View style={{ backgroundColor: t.inputBg, borderRadius: radius.md, padding: 14, borderWidth: 1, borderColor: t.inputBorder, gap: spacing.sm }}>
-              <Input value={newName} onChangeText={setNewName} placeholder="Име на наемателя *" />
+              <Input value={newName} onChangeText={(v) => { setNewName(v); clearError('newName'); }} placeholder="Име на наемателя *" error={!!errors.newName} />
+              {errors.newName ? (
+                <Text accessibilityRole="alert" style={{ fontSize: 12, fontWeight: '600', color: t.danger }}>{errors.newName}</Text>
+              ) : null}
               <Input value={newPhone} onChangeText={setNewPhone} placeholder="Телефон (по избор)" keyboardType="phone-pad" />
               <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs }}>
                 <Button label="Откажи" variant="secondary" onPress={resetNewTenant} style={{ flex: 1 }} />
@@ -563,24 +576,25 @@ function AddLeaseModal({ visible, tenantList, onClose, onSave, onCreateTenant }:
         </View>
       </Field>
 
-      <Field label="Наемна сума *">
-        <Input value={rentAmount} onChangeText={setRentAmount} placeholder="0" keyboardType="decimal-pad" />
+      <Field label="Наемна сума *" error={errors.amount}>
+        <Input value={rentAmount} onChangeText={(v) => { setRentAmount(v); clearError('amount'); }} placeholder="0" keyboardType="decimal-pad" error={!!errors.amount} />
       </Field>
 
       <Field label="Валута">
         <ChipGroup options={[{ value: 'EUR', label: 'EUR €' }, { value: 'BGN', label: 'BGN лв.' }]} value={currency} onChange={setCurrency} />
       </Field>
 
-      <Field label="Ден за плащане *" hint="Число от 1 до 31">
-        <Input value={paymentDay} onChangeText={setPaymentDay} placeholder="1" keyboardType="number-pad" />
+      <Field label="Ден за плащане *" hint="Число от 1 до 31" error={errors.day}>
+        <Input value={paymentDay} onChangeText={(v) => { setPaymentDay(v); clearError('day'); }} placeholder="1" keyboardType="number-pad" error={!!errors.day} />
       </Field>
 
-      <Field label="Начална дата *">
-        <DateField value={startDate} onChange={setStartDate} />
+      <Field label="Начална дата *" error={errors.startDate}>
+        {/* Крайната дата зависи от началната, затова редакция тук чисти и нейната грешка. */}
+        <DateField value={startDate} onChange={(v) => { setStartDate(v); clearError('startDate'); clearError('endDate'); }} />
       </Field>
 
-      <Field label="Крайна дата" hint="По избор — за срочен договор; справките очакват плащания само до този месец">
-        <DateField value={endDate} onChange={setEndDate} onClear={() => setEndDate(null)} placeholder="По избор" />
+      <Field label="Крайна дата" hint="По избор — за срочен договор; справките очакват плащания само до този месец" error={errors.endDate}>
+        <DateField value={endDate} onChange={(v) => { setEndDate(v); clearError('endDate'); }} onClear={() => { setEndDate(null); clearError('endDate'); }} placeholder="По избор" />
       </Field>
 
       <Field label="Депозит">
@@ -613,6 +627,7 @@ function PaymentModal({ state, currency, defaultAmount, takenPeriods, onClose, o
   const [status, setStatus] = useState<Payment['status']>(initial?.status ?? 'paid');
   const [paidDate, setPaidDate] = useState(initial?.paidDate ?? format(new Date(), 'yyyy-MM-dd'));
   const [notes, setNotes] = useState(initial?.notes ?? '');
+  const [errors, setErrors] = useState<{ amount?: string; period?: string; months?: string }>({});
 
   const monthCount = Math.max(1, parseInt(months, 10) || 1);
   const perMonth = parseFloat(amount);
@@ -620,29 +635,36 @@ function PaymentModal({ state, currency, defaultAmount, takenPeriods, onClose, o
   const previewPeriods = listPeriods(period, monthCount);
   const lastPeriod = previewPeriods[previewPeriods.length - 1] ?? period;
 
+  function clearError(key: keyof typeof errors) {
+    setErrors((e) => (e[key] ? { ...e, [key]: undefined } : e));
+  }
+
   function handleSave() {
+    const next: typeof errors = {};
     const a = parseFloat(amount);
-    if (!amount || isNaN(a) || a <= 0) { Alert.alert('Задължително', 'Моля, въведете валидна сума.'); return; }
-    if (!/^\d{4}-\d{2}$/.test(period)) { Alert.alert('Задължително', 'Въведете период във формат ГГГГ-ММ.'); return; }
+    if (!amount || isNaN(a) || a <= 0) next.amount = 'Въведете валидна сума';
+    if (!/^\d{4}-\d{2}$/.test(period)) next.period = 'Изберете период';
 
     const paid = status === 'paid' ? paidDate : null;
 
     if (isEdit) {
-      const conflict = takenPeriods.includes(period) && initial?.period !== period;
-      if (conflict) { Alert.alert('Дублиран период', `Вече има записано плащане за ${formatPeriod(period)}.`); return; }
+      if (!next.period && takenPeriods.includes(period) && initial?.period !== period) {
+        next.period = 'Вече има плащане за този период';
+      }
+      if (Object.values(next).some(Boolean)) { setErrors(next); return; }
       onSubmit([{ period, amount: a, method, status, paidDate: paid, notes: notes.trim() || null }]);
       return;
     }
 
     const m = parseInt(months, 10);
-    if (isNaN(m) || m < 1 || m > 36) { Alert.alert('Невалиден брой', 'Броят месеци трябва да е от 1 до 36.'); return; }
-    const periods = listPeriods(period, m);
-    const conflicts = periods.filter((p) => takenPeriods.includes(p));
-    if (conflicts.length > 0) {
-      Alert.alert('Дублиран период', `Вече има записано плащане за ${conflicts.map(formatPeriod).join(', ')}.`);
-      return;
+    if (isNaN(m) || m < 1 || m > 36) next.months = 'Броят месеци трябва да е от 1 до 36';
+    if (!next.period && !next.months) {
+      const conflicts = listPeriods(period, m).filter((p) => takenPeriods.includes(p));
+      if (conflicts.length === 1) next.period = 'Вече има плащане за този период';
+      else if (conflicts.length > 1) next.period = `Вече има плащания за: ${conflicts.map(formatPeriod).join(', ')}`;
     }
-    onSubmit(periods.map((p) => ({ period: p, amount: a, method, status, paidDate: paid, notes: notes.trim() || null })));
+    if (Object.values(next).some(Boolean)) { setErrors(next); return; }
+    onSubmit(listPeriods(period, m).map((p) => ({ period: p, amount: a, method, status, paidDate: paid, notes: notes.trim() || null })));
   }
 
   return (
@@ -652,18 +674,19 @@ function PaymentModal({ state, currency, defaultAmount, takenPeriods, onClose, o
       onSave={handleSave}
       saveLabel={isEdit ? 'Запази' : multi ? `Добави ${monthCount}` : 'Добави'}
       title={isEdit ? 'Редактиране на плащане' : 'Запиши плащане'}>
-      <Field label={isEdit ? 'Период *' : 'Начален период *'}>
-        <MonthField value={period} onChange={setPeriod} />
+      <Field label={isEdit ? 'Период *' : 'Начален период *'} error={errors.period}>
+        <MonthField value={period} onChange={(v) => { setPeriod(v); clearError('period'); }} />
       </Field>
 
       {!isEdit ? (
-        <Field label="Брой месеци" hint="Предплащане за няколко месеца наведнъж (напр. 12 = една година)">
-          <Input value={months} onChangeText={setMonths} placeholder="1" keyboardType="number-pad" />
+        <Field label="Брой месеци" hint="Предплащане за няколко месеца наведнъж (напр. 12 = една година)" error={errors.months}>
+          {/* Дублираният период зависи и от броя месеци, затова редакция тук чисти и неговата грешка. */}
+          <Input value={months} onChangeText={(v) => { setMonths(v); clearError('months'); clearError('period'); }} placeholder="1" keyboardType="number-pad" error={!!errors.months} />
         </Field>
       ) : null}
 
-      <Field label={`${multi ? 'Сума на месец' : 'Сума'} * (${currency === 'BGN' ? 'лв.' : '€'})`}>
-        <Input value={amount} onChangeText={setAmount} placeholder="0" keyboardType="decimal-pad" />
+      <Field label={`${multi ? 'Сума на месец' : 'Сума'} * (${currency === 'BGN' ? 'лв.' : '€'})`} error={errors.amount}>
+        <Input value={amount} onChangeText={(v) => { setAmount(v); clearError('amount'); }} placeholder="0" keyboardType="decimal-pad" error={!!errors.amount} />
       </Field>
 
       {multi ? (
@@ -712,16 +735,17 @@ function EditPropertyModal({ visible, property, onClose, onSave }: {
   const [address, setAddress] = useState(property.address ?? '');
   const [type, setType] = useState<Property['type']>(property.type);
   const [notes, setNotes] = useState(property.notes ?? '');
+  const [nameError, setNameError] = useState<string | undefined>();
 
   function handleSave() {
-    if (!name.trim()) { Alert.alert('Задължително', 'Моля, въведете името на имота.'); return; }
+    if (!name.trim()) { setNameError('Въведете име'); return; }
     onSave({ name: name.trim(), address: address.trim() || null, type, notes: notes.trim() || null });
   }
 
   return (
     <SheetModal visible={visible} onClose={onClose} onSave={handleSave} title="Редактиране на имот">
-      <Field label="Име *">
-        <Input value={name} onChangeText={setName} placeholder="напр. Ап. 3, ул. Осма" />
+      <Field label="Име *" error={nameError}>
+        <Input value={name} onChangeText={(v) => { setName(v); setNameError(undefined); }} placeholder="напр. Ап. 3, ул. Осма" error={!!nameError} />
       </Field>
       <Field label="Адрес">
         <Input value={address} onChangeText={setAddress} placeholder="По избор" />

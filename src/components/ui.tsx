@@ -284,20 +284,24 @@ export function FAB({ onPress, icon = '+' }: { onPress: () => void; icon?: strin
  * Form controls
  * ------------------------------------------------------------------ */
 
-export function Field({ label, hint, children, style }: { label: string; hint?: string; children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
+export function Field({ label, hint, error, children, style }: { label: string; hint?: string; error?: string; children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
   const t = useTheme();
   return (
     <View style={[{ marginBottom: spacing.xl }, style]}>
       <Text style={{ fontSize: 13, fontWeight: '700', color: t.textSecondary, marginBottom: spacing.sm, letterSpacing: 0.2 }}>{label}</Text>
       {children}
-      {hint ? <Text style={{ fontSize: 12, color: t.textMuted, marginTop: 6 }}>{hint}</Text> : null}
+      {error ? (
+        <Text accessibilityRole="alert" style={{ fontSize: 12, fontWeight: '600', color: t.danger, marginTop: 6 }}>{error}</Text>
+      ) : hint ? (
+        <Text style={{ fontSize: 12, color: t.textMuted, marginTop: 6 }}>{hint}</Text>
+      ) : null}
     </View>
   );
 }
 
-export function Input(props: TextInputProps & { multiline?: boolean }) {
+export function Input(props: TextInputProps & { multiline?: boolean; error?: boolean }) {
   const t = useTheme();
-  const { style, multiline, ...rest } = props;
+  const { style, multiline, error, ...rest } = props;
   return (
     <TextInput
       placeholderTextColor={t.textMuted}
@@ -312,7 +316,7 @@ export function Input(props: TextInputProps & { multiline?: boolean }) {
           color: t.text,
           fontSize: 16,
           borderWidth: 1,
-          borderColor: t.inputBorder,
+          borderColor: error ? t.danger : t.inputBorder,
         },
         multiline ? { minHeight: 92, textAlignVertical: 'top', paddingTop: 12 } : null,
         style as StyleProp<TextStyle>,

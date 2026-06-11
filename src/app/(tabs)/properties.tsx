@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { View, Text, FlatList, Alert, RefreshControl } from 'react-native';
+import { View, Text, FlatList, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db/client';
@@ -221,11 +221,12 @@ function AddPropertyModal({ visible, onClose, onSave }: {
   const [address, setAddress] = useState('');
   const [type, setType] = useState<NewProperty['type']>('apartment');
   const [notes, setNotes] = useState('');
+  const [nameError, setNameError] = useState<string | undefined>();
 
-  function reset() { setName(''); setAddress(''); setType('apartment'); setNotes(''); }
+  function reset() { setName(''); setAddress(''); setType('apartment'); setNotes(''); setNameError(undefined); }
 
   function handleSave() {
-    if (!name.trim()) { Alert.alert('Задължително', 'Моля, въведете името на имота.'); return; }
+    if (!name.trim()) { setNameError('Въведете име'); return; }
     onSave({ id: generateId(), name: name.trim(), address: address.trim() || null, type, status: 'free', notes: notes.trim() || null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     reset();
   }
@@ -234,8 +235,8 @@ function AddPropertyModal({ visible, onClose, onSave }: {
 
   return (
     <SheetModal visible={visible} onClose={handleClose} onSave={handleSave} title="Нов имот">
-      <Field label="Име *">
-        <Input value={name} onChangeText={setName} placeholder="напр. Ап. 3, ул. Осма" />
+      <Field label="Име *" error={nameError}>
+        <Input value={name} onChangeText={(v) => { setName(v); setNameError(undefined); }} placeholder="напр. Ап. 3, ул. Осма" error={!!nameError} />
       </Field>
       <Field label="Адрес">
         <Input value={address} onChangeText={setAddress} placeholder="По избор" />
