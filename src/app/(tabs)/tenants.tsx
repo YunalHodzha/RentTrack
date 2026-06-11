@@ -5,6 +5,8 @@ import { db } from '@/db/client';
 import { tenants, leases } from '@/db/schema';
 import { useAppStore } from '@/store';
 import { toast } from '@/store/toast';
+import { confirm } from '@/store/confirm';
+import { softDeleteTenant } from '@/db/soft-delete';
 import { syncNow } from '@/services/sync-runtime';
 import { isSupabaseConfigured } from '@/services/supabase';
 import { useFocusReload } from '@/hooks/use-focus-reload';
@@ -14,7 +16,7 @@ import type { NewTenant, Tenant } from '@/db/schema';
 import { generateId } from '@/lib/uuid';
 import {
   Screen, Header, Card, Avatar, Badge, FAB, EmptyState, ListSkeleton, ErrorState, Button,
-  SheetModal, Field, Input, useTheme, spacing,
+  SheetModal, Field, Input, SwipeableRow, useTheme, spacing,
 } from '@/components/ui';
 import { useLoadingState } from '@/hooks/use-loading-state';
 
@@ -74,6 +76,36 @@ export default function TenantsScreen() {
     }
   }
 
+  // Swipe-to-delete: същата проверка за активен договор, същият confirm диалог
+  // (вкл. предупреждението за историята) и същият soft-delete + toast като в
+  // детайлния екран. Проверката чете от базата, не от activeIds, за да е свежа.
+  async function handleSwipeDelete(item: Tenant): Promise<boolean> {
+    const uid = currentUserId();
+    if (!uid) return false;
+    try {
+      const tenantLeases = await db.select().from(leases)
+        .where(ownedAndLive(leases, uid, eq(leases.tenantId, item.id)));
+      if (tenantLeases.some((l) => l.status === 'active')) {
+        toast.error('Изтриването е блокирано: има активен договор');
+        return false;
+      }
+      const extra = tenantLeases.length > 0 ? ' Историята на договорите и плащанията също ще бъде изтрита.' : '';
+      const ok = await confirm({
+        title: 'Изтриване на наемател',
+        message: `Сигурни ли сте, че искате да изтриете „${item.name}“?${extra}`,
+        confirmLabel: 'Изтрий',
+        tone: 'danger',
+      });
+      if (!ok) return false;
+      await softDeleteTenant(db, item.id);
+      toast.success('Наемателят е изтрит');
+      return true;
+    } catch {
+      toast.error('Неуспешно изтриране на наемателя');
+      return false;
+    }
+  }
+
   // Клиентско търсене по име/телефон над заредения списък (моментално).
   const q = query.trim().toLowerCase();
   const filtered = q
@@ -81,17 +113,19 @@ export default function TenantsScreen() {
     : list;
 
   const renderItem = ({ item }: { item: Tenant }) => (
-    <Card onPress={() => router.push(`/tenant/${item.id}`)} style={{ marginBottom: spacing.md }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <Avatar name={item.name} />
-        <View style={{ flex: 1, marginLeft: spacing.md }}>
-          <Text style={{ fontSize: 16, fontWeight: '700', color: t.text }} numberOfLines={1}>{item.name}</Text>
-          {item.phone ? <Text style={{ fontSize: 13, color: t.textSecondary, marginTop: 2 }}>{item.phone}</Text> : null}
-          {item.email ? <Text style={{ fontSize: 13, color: t.textMuted, marginTop: 1 }} numberOfLines={1}>{item.email}</Text> : null}
+    <SwipeableRow onDelete={() => handleSwipeDelete(item)} onDeleted={loadTenants}>
+      <Card onPress={() => router.push(`/tenant/${item.id}`)}>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Avatar name={item.name} />
+          <View style={{ flex: 1, marginLeft: spacing.md }}>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: t.text }} numberOfLines={1}>{item.name}</Text>
+            {item.phone ? <Text style={{ fontSize: 13, color: t.textSecondary, marginTop: 2 }}>{item.phone}</Text> : null}
+            {item.email ? <Text style={{ fontSize: 13, color: t.textMuted, marginTop: 1 }} numberOfLines={1}>{item.email}</Text> : null}
+          </View>
+          {activeIds.has(item.id) ? <Badge label="Активен наем" tone="success" /> : null}
         </View>
-        {activeIds.has(item.id) ? <Badge label="Активен наем" tone="success" /> : null}
-      </View>
-    </Card>
+      </Card>
+    </SwipeableRow>
   );
 
   return (

@@ -4,6 +4,8 @@ import {
   KeyboardAvoidingView, Platform, ActivityIndicator, Animated,
   type ViewStyle, type TextStyle, type TextInputProps, type StyleProp, type DimensionValue,
 } from 'react-native';
+import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
+import ReAnimated, { useSharedValue, useAnimatedStyle, withTiming, runOnJS } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, toneColors, spacing, radius, shadow, type Theme, type Tone } from '@/theme';
 import { useToastStore, type ToastItem, type ToastType } from '@/store/toast';
@@ -80,6 +82,82 @@ export function Card({ children, style, onPress }: { children: React.ReactNode; 
     );
   }
   return <View style={[base, style]}>{children}</View>;
+}
+
+/* ------------------------------------------------------------------ *
+ * Swipeable row (swipe-to-delete)
+ * ------------------------------------------------------------------ */
+
+/**
+ * Ред в списък, който при плъзване наляво разкрива червено действие „Изтрий“.
+ *
+ * Бизнес логиката живее изцяло в `onDelete` (проверки, confirm диалог,
+ * soft-delete, toast) — то връща дали редът наистина е изтрит. При `true`
+ * редът се анимира навън (височина+прозрачност) и накрая се вика `onDeleted`
+ * (обикновено reload на списъка); при `false` действието се прибира обратно.
+ */
+export function SwipeableRow({ children, onDelete, onDeleted, deleteLabel = 'Изтрий', gap = spacing.md }: {
+  children: React.ReactNode;
+  onDelete: () => Promise<boolean>;
+  onDeleted: () => void;
+  deleteLabel?: string;
+  /** Разстояние под реда — свива се заедно с него при изтриване. */
+  gap?: number;
+}) {
+  const t = useTheme();
+  const swipeRef = useRef<SwipeableMethods | null>(null);
+  const busyRef = useRef(false);
+  const rowHeight = useSharedValue(0);
+  // -1 = неактивно (auto височина); иначе текущата анимирана височина при свиване.
+  const collapse = useSharedValue(-1);
+
+  const containerStyle = useAnimatedStyle(() => {
+    if (collapse.value < 0) return { marginBottom: gap };
+    const f = rowHeight.value > 0 ? collapse.value / rowHeight.value : 0;
+    return { height: collapse.value, marginBottom: gap * f, opacity: f, overflow: 'hidden' as const };
+  });
+
+  async function handleDelete() {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    try {
+      const deleted = await onDelete();
+      if (!deleted) { swipeRef.current?.close(); return; }
+      collapse.value = rowHeight.value;
+      collapse.value = withTiming(0, { duration: 220 }, (finished) => {
+        if (finished) runOnJS(onDeleted)();
+      });
+    } finally {
+      busyRef.current = false;
+    }
+  }
+
+  return (
+    <ReAnimated.View
+      style={containerStyle}
+      onLayout={(e) => { if (collapse.value < 0) rowHeight.value = e.nativeEvent.layout.height; }}>
+      <ReanimatedSwipeable
+        ref={swipeRef}
+        friction={2}
+        rightThreshold={40}
+        overshootRight={false}
+        renderRightActions={() => (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={handleDelete}
+            accessibilityRole="button"
+            accessibilityLabel={deleteLabel}
+            style={{
+              width: 92, marginLeft: spacing.md, borderRadius: radius.lg,
+              backgroundColor: t.danger, alignItems: 'center', justifyContent: 'center',
+            }}>
+            <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '800' }}>{deleteLabel}</Text>
+          </TouchableOpacity>
+        )}>
+        {children}
+      </ReanimatedSwipeable>
+    </ReAnimated.View>
+  );
 }
 
 /* ------------------------------------------------------------------ *

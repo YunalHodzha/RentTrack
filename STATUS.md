@@ -205,7 +205,10 @@
 **UX поправки от тест на устройство (Android) — преди swipe-to-delete ✅**
 - [x] **ConfirmDialog (единен стил)** — `src/store/confirm.ts` (Zustand + императивен `confirm()` → `Promise<boolean>`, по модела на toast-а) и `ConfirmHost` в дизайн системата: същински transparent RN `Modal` (показва се НАД отворен `SheetModal`), центрирана карта с цветове/типография/радиуси/safe-area от темата (dark/light), разрушителното действие в `danger` тон. Монтиран веднъж в `_layout.tsx`. Заменени всички разрушителни потвърждения (изход, възстановяване на данни, изтриване на имот/наемател/плащане, приключване на договор); еднобутонните валидационни Alert-и остават за частта „Форми".
 - [x] **Клавиатура не крие полето за парола (Android)** — `KeyboardAvoidingView` `behavior` = `padding` (iOS) / `height` (Android); при отворена клавиатура auth формата се подравнява отгоре вместо центрирана; `app.json` → `android.softwareKeyboardLayoutMode: "resize"`. Същият `behavior` фикс приложен и на споделения `SheetModal` (формите договор/плащане).
-- [ ] **Следващи части на 4.5.3:** date picker; swipe-to-delete; haptics; disabled бутони при запис; достъпност.
+**Част 4 — swipe-to-delete на списъците ✅**
+- [x] **`SwipeableRow` в дизайн системата** (`ui.tsx`) — върху `ReanimatedSwipeable` (`react-native-gesture-handler/ReanimatedSwipeable`, Reanimated версията; старият `Swipeable` е deprecated). Плъзване наляво разкрива червено „Изтрий" (`danger` от темата, `accessibilityRole="button"`); при изтриване редът се свива навън (височина+отстояние+прозрачност, Reanimated `withTiming`), при отказ Swipeable се затваря обратно. `GestureHandlerRootView` вече беше в `_layout.tsx`.
+- [x] **Закачен за имоти и наематели** (`(tabs)/properties.tsx`, `(tabs)/tenants.tsx`) — минава през СЪЩИЯ `confirm()` диалог, СЪЩИЯ soft-delete + toast и СЪЩАТА блокировка „има активен договор" като детайлните екрани (проверката чете свежо от базата); при наемател с история — същото предупреждение, че договорите/плащанията също се трият. Работи и върху филтрирания списък; бутоните за изтриване в детайлните екрани остават (достъпност/алтернатива).
+- [ ] **Следващи части на 4.5.3:** date picker; haptics; disabled бутони при запис; достъпност.
 
 ### Phase 5 — Публикуване
 - [ ] Google Play Developer акаунт ($25)

@@ -1,11 +1,14 @@
 import { useCallback, useState } from 'react';
 import { View, Text, FlatList, Alert, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
+import { eq } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { properties } from '@/db/schema';
+import { properties, leases } from '@/db/schema';
 import { ownedAndLive, currentUserId, withOwner } from '@/db/owner';
+import { softDeleteProperty } from '@/db/soft-delete';
 import { useAppStore } from '@/store';
 import { toast } from '@/store/toast';
+import { confirm } from '@/store/confirm';
 import { syncNow } from '@/services/sync-runtime';
 import { isSupabaseConfigured } from '@/services/supabase';
 import { useFocusReload } from '@/hooks/use-focus-reload';
@@ -13,7 +16,7 @@ import type { NewProperty, Property } from '@/db/schema';
 import { generateId } from '@/lib/uuid';
 import {
   Screen, Header, Card, Badge, IconBadge, FAB, EmptyState, ListSkeleton, ErrorState, Button,
-  SheetModal, Field, Input, ChipGroup, useTheme, spacing,
+  SheetModal, Field, Input, ChipGroup, SwipeableRow, useTheme, spacing,
 } from '@/components/ui';
 import { useLoadingState } from '@/hooks/use-loading-state';
 import { PROPERTY_TYPES, TYPE_LABELS, TYPE_ICONS, STATUS_LABELS, STATUS_TONE } from '@/lib/domain';
@@ -74,6 +77,36 @@ export default function PropertiesScreen() {
     }
   }
 
+  // Swipe-to-delete: същата проверка за активен договор, същият confirm диалог
+  // и същият soft-delete + toast като в детайлния екран. Връща дали редът е
+  // изтрит, за да знае SwipeableRow дали да се анимира навън или да се затвори.
+  async function handleSwipeDelete(item: Property): Promise<boolean> {
+    const uid = currentUserId();
+    if (!uid) return false;
+    try {
+      const [active] = await db.select().from(leases)
+        .where(ownedAndLive(leases, uid, eq(leases.propertyId, item.id), eq(leases.status, 'active')))
+        .limit(1);
+      if (active) {
+        toast.error('Изтриването е блокирано: има активен договор');
+        return false;
+      }
+      const ok = await confirm({
+        title: 'Изтриване на имот',
+        message: `Сигурни ли сте, че искате да изтриете „${item.name}“?`,
+        confirmLabel: 'Изтрий',
+        tone: 'danger',
+      });
+      if (!ok) return false;
+      await softDeleteProperty(db, item.id);
+      toast.success('Имотът е изтрит');
+      return true;
+    } catch {
+      toast.error('Неуспешно изтриране на имота');
+      return false;
+    }
+  }
+
   // Клиентско филтриране над вече заредения списък (данните са малко → без
   // дебаунс/useMemo, моментално е).
   const q = query.trim().toLowerCase();
@@ -85,17 +118,19 @@ export default function PropertiesScreen() {
   });
 
   const renderItem = ({ item }: { item: Property }) => (
-    <Card onPress={() => router.push(`/property/${item.id}`)} style={{ marginBottom: spacing.md }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <IconBadge icon={TYPE_ICONS[item.type] ?? '📦'} tone={STATUS_TONE[item.status]} />
-        <View style={{ flex: 1, marginLeft: spacing.md }}>
-          <Text style={{ fontSize: 16, fontWeight: '700', color: t.text }} numberOfLines={1}>{item.name}</Text>
-          {item.address ? <Text style={{ fontSize: 13, color: t.textSecondary, marginTop: 2 }} numberOfLines={1}>{item.address}</Text> : null}
-          <Text style={{ fontSize: 12, color: t.textMuted, marginTop: 3 }}>{TYPE_LABELS[item.type] ?? item.type}</Text>
+    <SwipeableRow onDelete={() => handleSwipeDelete(item)} onDeleted={loadProperties}>
+      <Card onPress={() => router.push(`/property/${item.id}`)}>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <IconBadge icon={TYPE_ICONS[item.type] ?? '📦'} tone={STATUS_TONE[item.status]} />
+          <View style={{ flex: 1, marginLeft: spacing.md }}>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: t.text }} numberOfLines={1}>{item.name}</Text>
+            {item.address ? <Text style={{ fontSize: 13, color: t.textSecondary, marginTop: 2 }} numberOfLines={1}>{item.address}</Text> : null}
+            <Text style={{ fontSize: 12, color: t.textMuted, marginTop: 3 }}>{TYPE_LABELS[item.type] ?? item.type}</Text>
+          </View>
+          <Badge label={STATUS_LABELS[item.status]} tone={STATUS_TONE[item.status]} />
         </View>
-        <Badge label={STATUS_LABELS[item.status]} tone={STATUS_TONE[item.status]} />
-      </View>
-    </Card>
+      </Card>
+    </SwipeableRow>
   );
 
   return (
