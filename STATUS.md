@@ -180,8 +180,9 @@
 ### Phase 4.6 — Release hardening (текуща)
 > Подготовка за външни потребители (виж ROADMAP §10).
 - [x] Фикс на `paymentDay = 31` edge case в логиката за просрочие/известия (къси месеци) — `dueDateForPeriod()` в `lib/domain.ts` е единственият източник на клампването; просрочие и известия минават през нея *(2026-06-11)*
-- [ ] Password reset поток (Supabase + deep link обратно към приложението)
-- [ ] Изтриване на акаунт от приложението (Настройки → изтрива Supabase акаунта + всички данни; задължително изискване на Apple за приложения с регистрация)
+- [x] Фикс на таблото: индикаторът „Просрочени плащания" минава през клампнатия падеж (`isPaymentOverdue`) вместо голо `dayOfMonth > paymentDay` *(2026-06-11)*
+- [x] Password reset поток (Supabase + deep link обратно към приложението) — „Забравена парола?" в auth екрана + `/reset-password` екран (implicit flow, токени от URL fragment-а през `setSession`); ръчна стъпка: Redirect URLs в Supabase Dashboard *(2026-06-11)*
+- [x] Изтриване на акаунт от приложението (Настройки → изтрива Supabase акаунта + всички данни; задължително изискване на Apple за приложения с регистрация) — `supabase/account-deletion.sql` (изпълни ръчно) + „Опасна зона" в Настройки с ИЗТРИЙ потвърждение; ред: RPC → локален wipe → signOut *(2026-06-11)*
 - [ ] Date picker (`@react-native-community/datetimepicker`) вместо текстов вход за дати
 - [ ] Import / restore на JSON експорт
 - [ ] Crash reporting със Sentry (Expo интеграция)
