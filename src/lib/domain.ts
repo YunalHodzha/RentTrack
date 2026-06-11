@@ -69,7 +69,7 @@ export type Currency = 'EUR' | 'BGN';
 
 const CURRENCY_SYMBOL: Record<Currency, string> = { EUR: '€', BGN: 'лв.' };
 
-const BG_MONTHS = [
+export const BG_MONTHS = [
   'януари', 'февруари', 'март', 'април', 'май', 'юни',
   'юли', 'август', 'септември', 'октомври', 'ноември', 'декември',
 ];

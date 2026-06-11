@@ -15,7 +15,8 @@ import { confirm } from '@/store/confirm';
 import { schedulePaymentReminders } from '@/services/notifications';
 import {
   Screen, Card, Badge, IconBadge, SectionTitle, Button, Field, Input, ChipGroup,
-  InfoRow, Divider, EmptyState, Loading, ErrorState, SheetModal, useTheme, toneColors, spacing, radius, type Tone,
+  InfoRow, Divider, EmptyState, Loading, ErrorState, SheetModal, DateField, MonthField,
+  useTheme, toneColors, spacing, radius, type Tone,
 } from '@/components/ui';
 import { useDelayedFlag } from '@/hooks/use-loading-state';
 import {
@@ -24,7 +25,7 @@ import {
   formatMoney, formatPeriod, formatDate, listPeriods, deleteCascadeWarning, type Currency,
 } from '@/lib/domain';
 
-type PaymentInput = { period: string; amount: number; method: 'cash' | 'bank' | 'other'; status: Payment['status']; notes: string | null };
+type PaymentInput = { period: string; amount: number; method: 'cash' | 'bank' | 'other'; status: Payment['status']; paidDate: string | null; notes: string | null };
 
 type PaymentModalState = { mode: 'add' | 'edit'; payment?: Payment } | null;
 
@@ -82,8 +83,8 @@ export default function PropertyDetailScreen() {
   const currency: Currency = (activeLease?.currency as Currency) ?? 'EUR';
 
   async function handleAddLease(data: {
-    tenantId: string; rentAmount: number; currency: Currency;
-    paymentDay: number; startDate: string; depositAmount: number | null; notes: string | null;
+    tenantId: string; rentAmount: number; currency: Currency; paymentDay: number;
+    startDate: string; endDate: string | null; depositAmount: number | null; notes: string | null;
   }) {
     if (!property) return;
     try {
@@ -151,14 +152,16 @@ export default function PropertyDetailScreen() {
       if (paymentModal.mode === 'edit' && paymentModal.payment) {
         const prev = paymentModal.payment;
         const data = rows[0];
-        const paidDate = data.status === 'paid' ? (prev.paidDate ?? today) : prev.paidDate ?? null;
+        // Датата идва от picker-а във формата; пазим старото поведение при
+        // статус ≠ платено (запазваме предишната дата, не я нулираме).
+        const paidDate = data.status === 'paid' ? (data.paidDate ?? prev.paidDate ?? today) : prev.paidDate ?? null;
         await db.update(payments).set({ ...data, paidDate, updatedAt: now }).where(eq(payments.id, prev.id));
       } else {
         // Advance payment: one paid row per covered month so per-period logic
         // (collected totals, "current month" status, future reminders) stays correct.
         for (const data of rows) {
-          const paidDate = data.status === 'paid' ? today : null;
-          await db.insert(payments).values(withOwner({ id: generateId(), leaseId: activeLease.id, paidDate, createdAt: now, updatedAt: now, ...data }));
+          const paidDate = data.status === 'paid' ? (data.paidDate ?? today) : null;
+          await db.insert(payments).values(withOwner({ id: generateId(), leaseId: activeLease.id, createdAt: now, updatedAt: now, ...data, paidDate }));
         }
       }
       await loadData();
@@ -454,7 +457,7 @@ function AddLeaseModal({ visible, tenantList, onClose, onSave, onCreateTenant }:
   visible: boolean;
   tenantList: Tenant[];
   onClose: () => void;
-  onSave: (data: { tenantId: string; rentAmount: number; currency: Currency; paymentDay: number; startDate: string; depositAmount: number | null; notes: string | null }) => void;
+  onSave: (data: { tenantId: string; rentAmount: number; currency: Currency; paymentDay: number; startDate: string; endDate: string | null; depositAmount: number | null; notes: string | null }) => void;
   onCreateTenant: (data: { name: string; phone: string | null }) => Promise<Tenant>;
 }) {
   const t = useTheme();
@@ -463,6 +466,7 @@ function AddLeaseModal({ visible, tenantList, onClose, onSave, onCreateTenant }:
   const [currency, setCurrency] = useState<Currency>('EUR');
   const [paymentDay, setPaymentDay] = useState('1');
   const [startDate, setStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [endDate, setEndDate] = useState<string | null>(null);
   const [depositAmount, setDepositAmount] = useState('');
   const [notes, setNotes] = useState('');
 
@@ -476,7 +480,7 @@ function AddLeaseModal({ visible, tenantList, onClose, onSave, onCreateTenant }:
 
   function reset() {
     setSelectedTenantId(null); setRentAmount(''); setCurrency('EUR');
-    setPaymentDay('1'); setStartDate(format(new Date(), 'yyyy-MM-dd'));
+    setPaymentDay('1'); setStartDate(format(new Date(), 'yyyy-MM-dd')); setEndDate(null);
     setDepositAmount(''); setNotes('');
     resetNewTenant();
   }
@@ -502,8 +506,9 @@ function AddLeaseModal({ visible, tenantList, onClose, onSave, onCreateTenant }:
     const day = parseInt(paymentDay, 10);
     if (isNaN(day) || day < 1 || day > 31) { Alert.alert('Задължително', 'Денят за плащане трябва да е от 1 до 31.'); return; }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) { Alert.alert('Задължително', 'Въведете дата във формат ГГГГ-ММ-ДД.'); return; }
+    if (endDate && endDate < startDate) { Alert.alert('Невалидна дата', 'Крайната дата не може да е преди началната.'); return; }
     const deposit = depositAmount ? parseFloat(depositAmount) : null;
-    onSave({ tenantId: selectedTenantId, rentAmount: amount, currency, paymentDay: day, startDate, depositAmount: deposit && !isNaN(deposit) ? deposit : null, notes: notes.trim() || null });
+    onSave({ tenantId: selectedTenantId, rentAmount: amount, currency, paymentDay: day, startDate, endDate, depositAmount: deposit && !isNaN(deposit) ? deposit : null, notes: notes.trim() || null });
     reset();
   }
 
@@ -570,8 +575,12 @@ function AddLeaseModal({ visible, tenantList, onClose, onSave, onCreateTenant }:
         <Input value={paymentDay} onChangeText={setPaymentDay} placeholder="1" keyboardType="number-pad" />
       </Field>
 
-      <Field label="Начална дата *" hint="Формат ГГГГ-ММ-ДД">
-        <Input value={startDate} onChangeText={setStartDate} placeholder="ГГГГ-ММ-ДД" />
+      <Field label="Начална дата *">
+        <DateField value={startDate} onChange={setStartDate} />
+      </Field>
+
+      <Field label="Крайна дата" hint="По избор — за срочен договор; справките очакват плащания само до този месец">
+        <DateField value={endDate} onChange={setEndDate} onClear={() => setEndDate(null)} placeholder="По избор" />
       </Field>
 
       <Field label="Депозит">
@@ -602,6 +611,7 @@ function PaymentModal({ state, currency, defaultAmount, takenPeriods, onClose, o
   const [amount, setAmount] = useState(String(initial?.amount ?? defaultAmount));
   const [method, setMethod] = useState<'cash' | 'bank' | 'other'>(initial?.method ?? 'cash');
   const [status, setStatus] = useState<Payment['status']>(initial?.status ?? 'paid');
+  const [paidDate, setPaidDate] = useState(initial?.paidDate ?? format(new Date(), 'yyyy-MM-dd'));
   const [notes, setNotes] = useState(initial?.notes ?? '');
 
   const monthCount = Math.max(1, parseInt(months, 10) || 1);
@@ -615,10 +625,12 @@ function PaymentModal({ state, currency, defaultAmount, takenPeriods, onClose, o
     if (!amount || isNaN(a) || a <= 0) { Alert.alert('Задължително', 'Моля, въведете валидна сума.'); return; }
     if (!/^\d{4}-\d{2}$/.test(period)) { Alert.alert('Задължително', 'Въведете период във формат ГГГГ-ММ.'); return; }
 
+    const paid = status === 'paid' ? paidDate : null;
+
     if (isEdit) {
       const conflict = takenPeriods.includes(period) && initial?.period !== period;
       if (conflict) { Alert.alert('Дублиран период', `Вече има записано плащане за ${formatPeriod(period)}.`); return; }
-      onSubmit([{ period, amount: a, method, status, notes: notes.trim() || null }]);
+      onSubmit([{ period, amount: a, method, status, paidDate: paid, notes: notes.trim() || null }]);
       return;
     }
 
@@ -630,7 +642,7 @@ function PaymentModal({ state, currency, defaultAmount, takenPeriods, onClose, o
       Alert.alert('Дублиран период', `Вече има записано плащане за ${conflicts.map(formatPeriod).join(', ')}.`);
       return;
     }
-    onSubmit(periods.map((p) => ({ period: p, amount: a, method, status, notes: notes.trim() || null })));
+    onSubmit(periods.map((p) => ({ period: p, amount: a, method, status, paidDate: paid, notes: notes.trim() || null })));
   }
 
   return (
@@ -640,8 +652,8 @@ function PaymentModal({ state, currency, defaultAmount, takenPeriods, onClose, o
       onSave={handleSave}
       saveLabel={isEdit ? 'Запази' : multi ? `Добави ${monthCount}` : 'Добави'}
       title={isEdit ? 'Редактиране на плащане' : 'Запиши плащане'}>
-      <Field label={isEdit ? 'Период *' : 'Начален период *'} hint="Формат ГГГГ-ММ">
-        <Input value={period} onChangeText={setPeriod} placeholder="ГГГГ-ММ" />
+      <Field label={isEdit ? 'Период *' : 'Начален период *'}>
+        <MonthField value={period} onChange={setPeriod} />
       </Field>
 
       {!isEdit ? (
@@ -668,6 +680,12 @@ function PaymentModal({ state, currency, defaultAmount, takenPeriods, onClose, o
       <Field label="Статус">
         <ChipGroup options={PAYMENT_STATUSES.filter((s) => s.value !== 'overdue')} value={status} onChange={setStatus} />
       </Field>
+
+      {status === 'paid' ? (
+        <Field label="Дата на плащане">
+          <DateField value={paidDate} onChange={setPaidDate} />
+        </Field>
+      ) : null}
 
       <Field label="Начин на плащане">
         <ChipGroup options={PAYMENT_METHODS} value={method} onChange={setMethod} />

@@ -1,13 +1,15 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, Pressable, ScrollView, Modal, StyleSheet,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Animated,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Animated, Keyboard,
   type ViewStyle, type TextStyle, type TextInputProps, type StyleProp, type DimensionValue,
 } from 'react-native';
+import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import ReAnimated, { useSharedValue, useAnimatedStyle, withTiming, runOnJS } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, toneColors, spacing, radius, shadow, type Theme, type Tone } from '@/theme';
+import { formatDate, formatPeriod, BG_MONTHS } from '@/lib/domain';
 import { useToastStore, type ToastItem, type ToastType } from '@/store/toast';
 import { useConfirmStore, type ConfirmRequest } from '@/store/confirm';
 
@@ -354,6 +356,185 @@ export function ChipGroup<T extends string | number>({
         );
       })}
     </View>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Date / month pickers
+ *
+ * `DateField` пази стойността като 'yyyy-MM-dd' (формата в базата) и отваря
+ * нативния date picker: на Android — императивния диалог (следва системната
+ * тема; платформата не позволява да я форсираме), на iOS — spinner в долен
+ * лист с `themeVariant` от темата. `MonthField` е лек месец/година селектор
+ * от дизайн системата ('yyyy-MM') — нативният picker няма чист „само месец"
+ * режим кросплатформено.
+ * ------------------------------------------------------------------ */
+
+/** 'yyyy-MM-dd' -> локална Date (без UTC отместване); невалидно -> днес. */
+function parseISODate(value: string | null | undefined): Date {
+  const m = value ? /^(\d{4})-(\d{2})-(\d{2})/.exec(value) : null;
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date();
+}
+
+function toISODate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Pressable в стила на `Input` — общата обвивка на двете picker полета. */
+function PickerTrigger({ text, filled, onPress, onClear }: {
+  text: string;
+  filled: boolean;
+  onPress: () => void;
+  onClear?: () => void;
+}) {
+  const t = useTheme();
+  return (
+    <Pressable
+      onPress={() => { Keyboard.dismiss(); onPress(); }}
+      accessibilityRole="button"
+      style={{
+        backgroundColor: t.inputBg, borderRadius: radius.md, borderWidth: 1, borderColor: t.inputBorder,
+        paddingHorizontal: 14, paddingVertical: 13,
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+      <Text style={{ fontSize: 16, color: filled ? t.text : t.textMuted }}>{text}</Text>
+      {onClear && filled ? (
+        <TouchableOpacity onPress={onClear} hitSlop={10} accessibilityRole="button" accessibilityLabel="Изчисти">
+          <Text style={{ fontSize: 15, color: t.textMuted, fontWeight: '700' }}>✕</Text>
+        </TouchableOpacity>
+      ) : (
+        <Text style={{ fontSize: 15 }}>📅</Text>
+      )}
+    </Pressable>
+  );
+}
+
+export function DateField({ value, onChange, onClear, placeholder = 'Изберете дата' }: {
+  value: string | null;
+  /** Винаги получава валидно 'yyyy-MM-dd'; изчистването минава през `onClear`. */
+  onChange: (value: string) => void;
+  /** Ако е подаден, полето е „по избор" и показва ✕ за изчистване. */
+  onClear?: () => void;
+  placeholder?: string;
+}) {
+  const t = useTheme();
+  // iOS: чернова в долния лист — commit чак на „Готово", backdrop = отказ.
+  const [draft, setDraft] = useState<Date | null>(null);
+
+  function open() {
+    if (Platform.OS === 'android') {
+      DateTimePickerAndroid.open({
+        value: parseISODate(value),
+        mode: 'date',
+        onChange: (event, date) => {
+          if (event.type === 'set' && date) onChange(toISODate(date));
+        },
+      });
+    } else {
+      setDraft(parseISODate(value));
+    }
+  }
+
+  return (
+    <>
+      <PickerTrigger text={value ? formatDate(value) : placeholder} filled={!!value} onPress={open} onClear={onClear} />
+      {draft ? (
+        <Modal transparent animationType="fade" visible onRequestClose={() => setDraft(null)}>
+          <Pressable
+            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}
+            onPress={() => setDraft(null)}>
+            <Pressable
+              onPress={(e) => e.stopPropagation()}
+              style={{
+                backgroundColor: t.card, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg,
+                padding: spacing.xl, paddingBottom: spacing.xxl,
+              }}>
+              <DateTimePicker
+                value={draft}
+                mode="date"
+                display="spinner"
+                locale="bg-BG"
+                themeVariant={t.isDark ? 'dark' : 'light'}
+                onChange={(_event, date) => { if (date) setDraft(date); }}
+              />
+              <Button label="Готово" onPress={() => { onChange(toISODate(draft)); setDraft(null); }} fullWidth />
+            </Pressable>
+          </Pressable>
+        </Modal>
+      ) : null}
+    </>
+  );
+}
+
+export function MonthField({ value, onChange }: {
+  /** 'yyyy-MM' */
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const t = useTheme();
+  const [open, setOpen] = useState(false);
+  const [year, setYear] = useState(() => new Date().getFullYear());
+
+  function handleOpen() {
+    const m = /^(\d{4})-(\d{2})$/.exec(value);
+    setYear(m ? Number(m[1]) : new Date().getFullYear());
+    setOpen(true);
+  }
+
+  return (
+    <>
+      <PickerTrigger
+        text={/^\d{4}-\d{2}$/.test(value) ? formatPeriod(value) : 'Изберете месец'}
+        filled={/^\d{4}-\d{2}$/.test(value)}
+        onPress={handleOpen}
+      />
+      {open ? (
+        <Modal transparent animationType="fade" visible onRequestClose={() => setOpen(false)}>
+          <Pressable
+            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: spacing.xxl }}
+            onPress={() => setOpen(false)}>
+            <Pressable
+              onPress={(e) => e.stopPropagation()}
+              style={{
+                backgroundColor: t.card, borderRadius: radius.lg, padding: spacing.xl,
+                borderWidth: 1, borderColor: t.border, ...shadow.sm, shadowColor: t.shadowColor,
+              }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.lg }}>
+                <TouchableOpacity onPress={() => setYear((y) => y - 1)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Предишна година">
+                  <Text style={{ fontSize: 20, fontWeight: '800', color: t.primary, paddingHorizontal: spacing.md }}>‹</Text>
+                </TouchableOpacity>
+                <Text style={{ fontSize: 17, fontWeight: '800', color: t.text }}>{year}</Text>
+                <TouchableOpacity onPress={() => setYear((y) => y + 1)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Следваща година">
+                  <Text style={{ fontSize: 20, fontWeight: '800', color: t.primary, paddingHorizontal: spacing.md }}>›</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+                {BG_MONTHS.map((name, i) => {
+                  const period = `${year}-${String(i + 1).padStart(2, '0')}`;
+                  const active = period === value;
+                  return (
+                    <View key={period} style={{ width: '25%', padding: spacing.xs }}>
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => { onChange(period); setOpen(false); }}
+                        style={{
+                          paddingVertical: 10, borderRadius: radius.md, alignItems: 'center',
+                          backgroundColor: active ? t.primary : t.inputBg,
+                          borderWidth: 1, borderColor: active ? t.primary : t.inputBorder,
+                        }}>
+                        <Text style={{ fontSize: 14, fontWeight: active ? '700' : '500', color: active ? t.onPrimary : t.text }}>
+                          {name.slice(0, 3)}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      ) : null}
+    </>
   );
 }
 
