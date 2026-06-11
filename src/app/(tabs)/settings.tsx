@@ -1,10 +1,10 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { View, Text, ScrollView, Share } from 'react-native';
 import { useFocusEffect } from '@react-navigation/core';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
 import {
-  Screen, Header, Card, SectionTitle, Field, Input, ChipGroup, Button,
+  Screen, Header, Card, SectionTitle, Field, Input, ChipGroup, Button, SheetModal,
   useTheme, spacing, Divider,
 } from '@/components/ui';
 import { useSettingsStore } from '@/store/settings';
@@ -15,6 +15,7 @@ import { confirm } from '@/store/confirm';
 import { syncNow } from '@/services/sync-runtime';
 import { schedulePaymentReminders } from '@/services/notifications';
 import { exportDataAsJSON, exportDataAsCSV, importDataFromJSON } from '@/services/export';
+import { deleteAccount } from '@/services/account';
 import type { Currency } from '@/lib/domain';
 
 const CURRENCIES = [
@@ -29,6 +30,8 @@ export default function SettingsScreen() {
   const { status: syncStatus, lastSyncedAt, error: syncError } = useSyncStore();
   const [localCurrency, setLocalCurrency] = useState<Currency>(defaultCurrency);
   const [localDaysBefore, setLocalDaysBefore] = useState(String(notificationDaysBefore));
+  const [deleteAccountVisible, setDeleteAccountVisible] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -123,6 +126,26 @@ export default function SettingsScreen() {
     }
   }
 
+  // Редът (RPC → локален wipe → signOut) живее в services/account.ts. Модалът
+  // се затваря преди toast-а (RN Modal го крие отдолу). При грешка нищо не е
+  // изтрито — нито в облака, нито локално.
+  async function handleDeleteAccount() {
+    setDeletingAccount(true);
+    try {
+      const { error } = await deleteAccount();
+      setDeleteAccountVisible(false);
+      if (error) {
+        toast.error('Изтриването е неуспешно — нищо не е изтрито. Опитайте отново.');
+        console.error(error);
+      } else {
+        // Потребителят вече е изхвърлен към екрана за вход от auth gate-а.
+        toast.success('Акаунтът и всички данни са изтрити');
+      }
+    } finally {
+      setDeletingAccount(false);
+    }
+  }
+
   return (
     <Screen>
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
@@ -209,7 +232,66 @@ export default function SettingsScreen() {
           </Text>
           <Button label="Внеси от JSON" variant="secondary" onPress={handleImportJSON} fullWidth />
         </Card>
+
+        <SectionTitle>Опасна зона</SectionTitle>
+        <Card>
+          <Text style={{ fontSize: 13, color: t.textMuted, marginBottom: spacing.lg, lineHeight: 19 }}>
+            Изтрива акаунта ви и всички данни — от облака и от това устройство. Действието е безвъзвратно.
+          </Text>
+          <Button label="Изтриване на акаунт" variant="danger" onPress={() => setDeleteAccountVisible(true)} fullWidth />
+        </Card>
       </ScrollView>
+
+      <DeleteAccountModal
+        visible={deleteAccountVisible}
+        busy={deletingAccount}
+        onClose={() => setDeleteAccountVisible(false)}
+        onConfirm={handleDeleteAccount}
+      />
     </Screen>
+  );
+}
+
+/**
+ * Потвърждение за изтриване на акаунт. По-тежко от confirm() диалога нарочно:
+ * финалният бутон се отключва само след изписано ИЗТРИЙ — стандартната защита
+ * за необратими действия на ниво акаунт.
+ */
+function DeleteAccountModal({ visible, busy, onClose, onConfirm }: {
+  visible: boolean;
+  busy: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const t = useTheme();
+  const [confirmText, setConfirmText] = useState('');
+  const armed = confirmText.trim().toUpperCase() === 'ИЗТРИЙ';
+
+  // Нулираме полето при всяко затваряне, за да не остане модалът „зареден"
+  // при повторно отваряне.
+  useEffect(() => { if (!visible) setConfirmText(''); }, [visible]);
+
+  return (
+    <SheetModal visible={visible} onClose={onClose} title="Изтриване на акаунт">
+      <Text style={{ fontSize: 14, color: t.text, lineHeight: 21, marginBottom: spacing.lg }}>
+        Това ще изтрие акаунта ви и всички данни — имоти, наематели, договори и плащания — от облака и от това устройство. Действието е безвъзвратно и данните не могат да бъдат възстановени.
+      </Text>
+      <Field label="Напишете ИЗТРИЙ, за да потвърдите">
+        <Input
+          value={confirmText}
+          onChangeText={setConfirmText}
+          placeholder="ИЗТРИЙ"
+          autoCapitalize="characters"
+          autoCorrect={false}
+        />
+      </Field>
+      <Button
+        label={busy ? 'Изтриване…' : 'Изтрий акаунта завинаги'}
+        variant="danger"
+        onPress={onConfirm}
+        disabled={!armed || busy}
+        fullWidth
+      />
+    </SheetModal>
   );
 }

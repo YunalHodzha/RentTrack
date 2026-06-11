@@ -2,6 +2,7 @@ import { AppState } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { db } from '@/db/client';
+import { syncCursorKey } from '@/db/wipe';
 import { useAuthStore } from '@/store/auth';
 import { useSyncStore } from '@/store/sync';
 import { toast } from '@/store/toast';
@@ -30,7 +31,7 @@ const supabaseRemote: SyncRemote = {
 
 /** Cursor is namespaced per user so switching accounts on one device can't skip data. */
 function cursorFor(userId: string): CursorStore {
-  const key = `renttrack_sync_cursor_${userId}`;
+  const key = syncCursorKey(userId);
   return {
     get: async () => (await AsyncStorage.getItem(key)) ?? '',
     set: (value) => AsyncStorage.setItem(key, value),
@@ -38,6 +39,22 @@ function cursorFor(userId: string): CursorStore {
 }
 
 let inFlight = false;
+
+/**
+ * Изпълнява критична операция (изтриване на акаунт) под sync mutex-а: изчаква
+ * текущия run да приключи и държи `inFlight` вдигнат, така че фоновите тригери
+ * (интервал/foreground/reconnect) да no-op-ват, докато `fn` тече. Иначе фонов
+ * sync може да тръгне по средата на изтриването и да пише в изпразнената база.
+ */
+export async function withSyncPaused<T>(fn: () => Promise<T>): Promise<T> {
+  while (inFlight) await new Promise((resolve) => setTimeout(resolve, 100));
+  inFlight = true;
+  try {
+    return await fn();
+  } finally {
+    inFlight = false;
+  }
+}
 
 /**
  * Run a sync if possible. Safe to call from any trigger: it no-ops when
