@@ -179,14 +179,14 @@
 
 ### Phase 4.6 — Release hardening (текуща)
 > Подготовка за външни потребители (виж ROADMAP §10).
-- [ ] Фикс на `paymentDay = 31` edge case в логиката за просрочие/известия (къси месеци)
+- [x] Фикс на `paymentDay = 31` edge case в логиката за просрочие/известия (къси месеци) — `dueDateForPeriod()` в `lib/domain.ts` е единственият източник на клампването; просрочие и известия минават през нея *(2026-06-11)*
 - [ ] Password reset поток (Supabase + deep link обратно към приложението)
 - [ ] Изтриване на акаунт от приложението (Настройки → изтрива Supabase акаунта + всички данни; задължително изискване на Apple за приложения с регистрация)
 - [ ] Date picker (`@react-native-community/datetimepicker`) вместо текстов вход за дати
 - [ ] Import / restore на JSON експорт
 - [ ] Crash reporting със Sentry (Expo интеграция)
 - [ ] Onboarding / умни empty states за нов потребител („Добави първия си имот →")
-- [ ] Entitlement слой (подготовка за Phase 6): `getEntitlement(): 'free' | 'pro'` + `canAddProperty(count)`, засега винаги pro/true; всички места, създаващи имот, минават през тях
+- [x] Entitlement слой (подготовка за Phase 6): `getEntitlement(): 'free' | 'pro'` + `canAddProperty(count)`, засега винаги pro/true; всички места, създаващи имот, минават през тях — `src/lib/entitlement.ts`, проверка в `handleAdd` на екрана с имоти *(2026-06-11)*
 - [x] Пренаписване на README.md *(направено на 2026-06-11)*
 
 ### Phase 5A — Правно и идентичност

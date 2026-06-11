@@ -8,6 +8,7 @@ import {
   formatDate,
   isPaymentOverdue,
   paymentDueDate,
+  dueDateForPeriod,
 } from '../domain';
 
 describe('domain utilities', () => {
@@ -202,6 +203,40 @@ describe('domain utilities', () => {
       // April has 30 days; day 31 clamps to the 30th.
       expect(isPaymentOverdue('2026-04', 31, '2026-04-30')).toBe(false);
       expect(isPaymentOverdue('2026-04', 31, '2026-05-01')).toBe(true);
+    });
+  });
+
+  describe('dueDateForPeriod', () => {
+    it('clamps day 31 to end of February (non-leap year)', () => {
+      // 2026 не е високосна → февруари има 28 дни.
+      expect(dueDateForPeriod('2026-02', 31)).toBe('2026-02-28');
+    });
+
+    it('clamps day 31 to end of February (leap year)', () => {
+      // 2028 е високосна → февруари има 29 дни.
+      expect(dueDateForPeriod('2028-02', 31)).toBe('2028-02-29');
+    });
+
+    it('clamps day 31 in 30-day months', () => {
+      expect(dueDateForPeriod('2026-04', 31)).toBe('2026-04-30');
+    });
+
+    it('keeps day 31 in 31-day months', () => {
+      expect(dueDateForPeriod('2026-07', 31)).toBe('2026-07-31');
+    });
+
+    it('clamps day 30 to end of February', () => {
+      expect(dueDateForPeriod('2026-02', 30)).toBe('2026-02-28');
+    });
+
+    it('keeps days 1 and 15 unchanged', () => {
+      expect(dueDateForPeriod('2026-06', 1)).toBe('2026-06-01');
+      expect(dueDateForPeriod('2026-06', 15)).toBe('2026-06-15');
+    });
+
+    it('returns null for unparseable period', () => {
+      expect(dueDateForPeriod('invalid', 15)).toBeNull();
+      expect(dueDateForPeriod('2026', 15)).toBeNull();
     });
   });
 

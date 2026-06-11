@@ -14,6 +14,7 @@ import { isSupabaseConfigured } from '@/services/supabase';
 import { useFocusReload } from '@/hooks/use-focus-reload';
 import type { NewProperty, Property } from '@/db/schema';
 import { generateId } from '@/lib/uuid';
+import { canAddProperty } from '@/lib/entitlement';
 import {
   Screen, Header, Card, Badge, IconBadge, FAB, EmptyState, ListSkeleton, ErrorState, Button,
   SheetModal, Field, Input, ChipGroup, SwipeableRow, useTheme, spacing,
@@ -64,6 +65,14 @@ export default function PropertiesScreen() {
   }
 
   async function handleAdd(data: NewProperty) {
+    // Entitlement hook point (Phase 6): list е зареден с ownedAndLive, т.е.
+    // брои само неизтрити имоти. При getEntitlement() === 'pro' (сега винаги)
+    // проверката пропуска всичко.
+    if (!canAddProperty(list.length)) {
+      setModalVisible(false);
+      toast.error('Достигнат е лимитът на безплатния план');
+      return;
+    }
     // Затваряме модала и в двата случая (RN Modal крие toast-а отдолу), за да е
     // видима обратната връзка на екрана под него.
     try {

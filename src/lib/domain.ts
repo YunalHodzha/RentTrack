@@ -137,34 +137,36 @@ function daysInMonth(year: number, month: number): number {
 }
 
 /**
- * Check if a payment is overdue based on period, payment day, and today's date.
- * The payment day is clamped to the actual length of the month so that e.g.
- * paymentDay=31 in February resolves to the 28th/29th rather than an invalid
- * "2026-02-31".
+ * Връща реалната дата на падежа (ISO 'yyyy-MM-dd') за даден период ('yyyy-MM')
+ * и paymentDay, клампната към последния ден на месеца — вкл. високосен
+ * февруари: '2026-02' + 31 → '2026-02-28', '2028-02' + 31 → '2028-02-29'.
+ * Единственият източник на тази логика — просрочието (`isPaymentOverdue`) и
+ * известията (`paymentDueDate`) минават оттук. Връща `null` при невалиден период.
  */
-export function isPaymentOverdue(period: string, paymentDay: number, today: string = new Date().toISOString().split('T')[0]): boolean {
+export function dueDateForPeriod(period: string, paymentDay: number): string | null {
   const m = /^(\d{4})-(\d{2})$/.exec(period);
-  if (!m) return false;
-  const year = Number(m[1]);
-  const month = Number(m[2]);
-  const clampedDay = Math.min(paymentDay, daysInMonth(year, month));
-  const dueDate = `${m[1]}-${m[2]}-${String(clampedDay).padStart(2, '0')}`;
-  return today > dueDate;
+  if (!m) return null;
+  const clampedDay = Math.min(paymentDay, daysInMonth(Number(m[1]), Number(m[2])));
+  return `${m[1]}-${m[2]}-${String(clampedDay).padStart(2, '0')}`;
 }
 
 /**
- * Дата на падежа за период ('yyyy-MM') и ден за плащане. Денят се ограничава до
- * реалната дължина на месеца — за paymentDay=31 във февруари връща 28-и/29-и
- * вместо да се „търкулне" към следващия месец (както при `isPaymentOverdue`).
- * Връща `null` при невалиден период.
+ * Check if a payment is overdue based on period, payment day, and today's date.
+ * The due date comes from `dueDateForPeriod` (day clamped to month length);
+ * the comparison is lexicographic over ISO dates.
+ */
+export function isPaymentOverdue(period: string, paymentDay: number, today: string = new Date().toISOString().split('T')[0]): boolean {
+  const dueDate = dueDateForPeriod(period, paymentDay);
+  return dueDate !== null && today > dueDate;
+}
+
+/**
+ * Дата на падежа като `Date` (UTC полунощ) за насрочване на известия — тънка
+ * обвивка над `dueDateForPeriod`. Връща `null` при невалиден период.
  */
 export function paymentDueDate(period: string, paymentDay: number): Date | null {
-  const m = /^(\d{4})-(\d{2})$/.exec(period);
-  if (!m) return null;
-  const year = Number(m[1]);
-  const month = Number(m[2]);
-  const clampedDay = Math.min(paymentDay, daysInMonth(year, month));
-  return new Date(`${m[1]}-${m[2]}-${String(clampedDay).padStart(2, '0')}`);
+  const iso = dueDateForPeriod(period, paymentDay);
+  return iso ? new Date(iso) : null;
 }
 
 /**
