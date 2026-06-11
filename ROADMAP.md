@@ -224,15 +224,15 @@
 ### Фаза 4.5 — Консолидация и качество ✅
 Завършена: merge на cloud клона в `main`, единна toast/feedback система, skeleton states без трептене, тих фонов sync и фикс на startup freeze.
 
-### Фаза 4.6 — Release hardening
+### Фаза 4.6 — Release hardening *(код завършен 2026-06-11; виж STATUS.md за ръчната валидация)*
 > Подготовка за външни потребители — затваря известните остри ръбове, преди някой друг да докосне приложението.
-- Фикс на `paymentDay = 31` edge case в логиката за просрочие/известия (къси месеци).
+- Фикс на `paymentDay = 31` edge case в логиката за просрочие/известия (къси месеци) + таблото показва просрочия и от минали периоди.
 - Password reset поток (Supabase + deep link обратно към приложението).
 - Изтриване на акаунт от приложението (Настройки → изтрива Supabase акаунта + всички данни) — задължително изискване на Apple за приложения с регистрация.
-- Date picker (`@react-native-community/datetimepicker`) вместо текстов вход за дати.
-- Import / restore на JSON експорт.
-- Crash reporting със Sentry (Expo интеграция).
-- Onboarding / умни empty states за нов потребител („Добави първия си имот →").
+- Date picker (`@react-native-community/datetimepicker`) вместо текстов вход за дати *(реализиран още в 4.5.3)*.
+- Import / restore на JSON експорт — sync-съвместим replace (tombstone-и + LWW), не наивен wipe; в Настройки под „Разширени“.
+- Crash reporting със Sentry (Expo интеграция, PII-safe: само userId, без console breadcrumbs).
+- Onboarding / умни empty states за нов потребител (карта „Първи стъпки“ на таблото + CTA в празните екрани).
 - Entitlement слой (подготовка за Фаза 6): `getEntitlement(): 'free' | 'pro'` + `canAddProperty(count)`, които засега винаги връщат pro/true; всички места, създаващи имот, минават през тях.
 - Пренаписване на README.md.
 

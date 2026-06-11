@@ -177,8 +177,8 @@
 - [x] Фикс на startup freeze — recoverable error state + „Опитай отново" (retry) вместо безкраен спинер
 - Плюс UX пакета от 4.5.3: ConfirmDialog, swipe-to-delete, date picker (`DateField`/`MonthField`), pull-to-refresh, търсене/филтриране, полева валидация — нула `Alert.alert` в кода
 
-### Phase 4.6 — Release hardening (текуща)
-> Подготовка за външни потребители (виж ROADMAP §10).
+### Phase 4.6 — Release hardening — завършена ✅ (предстои ръчна валидация на устройство)
+> Подготовка за външни потребители (виж ROADMAP §10). Кодът е завършен на 2026-06-11 (сесии 1–4); остава ръчната валидация по-долу.
 - [x] Фикс на `paymentDay = 31` edge case в логиката за просрочие/известия (къси месеци) — `dueDateForPeriod()` в `lib/domain.ts` е единственият източник на клампването; просрочие и известия минават през нея *(2026-06-11)*
 - [x] Фикс на таблото: индикаторът „Просрочени плащания" минава през клампнатия падеж (`isPaymentOverdue`) вместо голо `dayOfMonth > paymentDay` *(2026-06-11)*
 - [x] Таблото показва просрочия и от МИНАЛИ периоди — `overduePeriodsForLease()` в `lib/domain.ts` (от старта на договора до текущия месец/endDate; покрива само `paid`, `partial` не); неплатен януари вече не изчезва на 1 февруари *(2026-06-11, сесия 3)*
@@ -187,10 +187,20 @@
 - [x] Изтриване на акаунт от приложението (Настройки → изтрива Supabase акаунта + всички данни; задължително изискване на Apple за приложения с регистрация) — `supabase/account-deletion.sql` (изпълни ръчно) + „Опасна зона" в Настройки с ИЗТРИЙ потвърждение; ред: RPC → локален wipe → signOut *(2026-06-11)*
 - [x] Date picker (`@react-native-community/datetimepicker`) вместо текстов вход за дати — *вече направено в 4.5.3 част 5а (`DateField`/`MonthField`), потвърдено с одит: нула останали ръчни полета за дата/период*
 - [x] Import / restore на JSON експорт — преработен sync-съвместимо: `services/import.ts` (валидация + version, tombstone на липсващите редове, upsert със свеж `updatedAt`/`userId`, курсорът не се нулира); two-device тест *(2026-06-11, сесия 3)*
-- [ ] Crash reporting със Sentry (Expo интеграция)
-- [ ] Onboarding / умни empty states за нов потребител („Добави първия си имот →")
+- [x] Crash reporting със Sentry (Expo интеграция) — `services/sentry.ts`: DSN от `EXPO_PUBLIC_SENTRY_DSN` (без него — изключен), PII-safe (само userId, без console breadcrumbs, sendDefaultPii: false), error boundary „Нещо се обърка", sync грешките дедуплицирани; ръчна стъпка: Sentry акаунт + DSN в .env *(2026-06-11, сесия 4)*
+- [x] Onboarding / умни empty states за нов потребител — карта „Първи стъпки" на таблото (3 стъпки от реалните данни, ✕ за скриване) + одит на empty states (CTA навсякъде) *(2026-06-11, сесия 4)*
 - [x] Entitlement слой (подготовка за Phase 6): `getEntitlement(): 'free' | 'pro'` + `canAddProperty(count)`, засега винаги pro/true; всички места, създаващи имот, минават през тях — `src/lib/entitlement.ts`, проверка в `handleAdd` на екрана с имоти *(2026-06-11)*
 - [x] Пренаписване на README.md *(направено на 2026-06-11)*
+
+**Ръчна валидация преди Фаза 5A** (насъбрано от сесии 2–4; реално устройство с development build):
+- [ ] Изпълни `supabase/account-deletion.sql` в Supabase SQL Editor
+- [ ] Добави Redirect URLs в Supabase (Authentication → URL Configuration): `renttrack://reset-password` + Expo Go варианта `exp://<IP>:8081/--/reset-password`
+- [ ] Password reset поток: заявка → имейл линк → нова парола → вход; и изтекъл/повторен линк → „Невалиден линк"
+- [ ] Изтриване на акаунт: тестов акаунт с данни → ИЗТРИЙ → проверка в Dashboard (auth.users и данните ги няма), вход невъзможен, нова регистрация стартира празна
+- [ ] Известия: насрочени → изход → изчезнали; вход → възстановени; същото при изтриване на акаунт
+- [ ] Date/Month picker на Android (диалог) и iOS (spinner лист), български формати
+- [ ] Import с включен sync на две устройства: А импортира файл → Б получава точно файла, нищо старо не „възкръсва"
+- [ ] Sentry: акаунт + DSN в .env, тестов throw (временно `enabled: true` в dev) → събитието се вижда в Sentry без лични данни
 
 ### Phase 5A — Правно и идентичност
 - [ ] Финално име на приложението + проверка за наличност в App Store / Google Play (RentTrack вероятно е заето)
