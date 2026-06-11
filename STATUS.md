@@ -181,10 +181,12 @@
 > Подготовка за външни потребители (виж ROADMAP §10).
 - [x] Фикс на `paymentDay = 31` edge case в логиката за просрочие/известия (къси месеци) — `dueDateForPeriod()` в `lib/domain.ts` е единственият източник на клампването; просрочие и известия минават през нея *(2026-06-11)*
 - [x] Фикс на таблото: индикаторът „Просрочени плащания" минава през клампнатия падеж (`isPaymentOverdue`) вместо голо `dayOfMonth > paymentDay` *(2026-06-11)*
+- [x] Таблото показва просрочия и от МИНАЛИ периоди — `overduePeriodsForLease()` в `lib/domain.ts` (от старта на договора до текущия месец/endDate; покрива само `paid`, `partial` не); неплатен януари вече не изчезва на 1 февруари *(2026-06-11, сесия 3)*
+- [x] Отмяна на насрочените известия при изтриване на акаунт и при изход — `cancelScheduledReminders()`; пренасрочват се при следващ вход (root layout ефекта по userId) *(2026-06-11, сесия 3)*
 - [x] Password reset поток (Supabase + deep link обратно към приложението) — „Забравена парола?" в auth екрана + `/reset-password` екран (implicit flow, токени от URL fragment-а през `setSession`); ръчна стъпка: Redirect URLs в Supabase Dashboard *(2026-06-11)*
 - [x] Изтриване на акаунт от приложението (Настройки → изтрива Supabase акаунта + всички данни; задължително изискване на Apple за приложения с регистрация) — `supabase/account-deletion.sql` (изпълни ръчно) + „Опасна зона" в Настройки с ИЗТРИЙ потвърждение; ред: RPC → локален wipe → signOut *(2026-06-11)*
-- [ ] Date picker (`@react-native-community/datetimepicker`) вместо текстов вход за дати
-- [ ] Import / restore на JSON експорт
+- [x] Date picker (`@react-native-community/datetimepicker`) вместо текстов вход за дати — *вече направено в 4.5.3 част 5а (`DateField`/`MonthField`), потвърдено с одит: нула останали ръчни полета за дата/период*
+- [x] Import / restore на JSON експорт — преработен sync-съвместимо: `services/import.ts` (валидация + version, tombstone на липсващите редове, upsert със свеж `updatedAt`/`userId`, курсорът не се нулира); two-device тест *(2026-06-11, сесия 3)*
 - [ ] Crash reporting със Sentry (Expo интеграция)
 - [ ] Onboarding / умни empty states за нов потребител („Добави първия си имот →")
 - [x] Entitlement слой (подготовка за Phase 6): `getEntitlement(): 'free' | 'pro'` + `canAddProperty(count)`, засега винаги pro/true; всички места, създаващи имот, минават през тях — `src/lib/entitlement.ts`, проверка в `handleAdd` на екрана с имоти *(2026-06-11)*
