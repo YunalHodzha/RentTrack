@@ -1,12 +1,13 @@
 import React, { useEffect, useRef } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, ScrollView, Modal,
+  View, Text, TextInput, TouchableOpacity, Pressable, ScrollView, Modal, StyleSheet,
   KeyboardAvoidingView, Platform, ActivityIndicator, Animated,
   type ViewStyle, type TextStyle, type TextInputProps, type StyleProp, type DimensionValue,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, toneColors, spacing, radius, shadow, type Theme, type Tone } from '@/theme';
 import { useToastStore, type ToastItem, type ToastType } from '@/store/toast';
+import { useConfirmStore, type ConfirmRequest } from '@/store/confirm';
 
 /* ------------------------------------------------------------------ *
  * Layout
@@ -561,6 +562,98 @@ export function ToastHost() {
         <ToastView key={item.id} item={item} onDismiss={dismiss} />
       ))}
     </View>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * ConfirmDialog — единно потвърждение за разрушителни действия.
+ *
+ * Императивен API като toast-а (`confirm()` → `Promise<boolean>`), но за разлика
+ * от toast-а това е същински RN `Modal` (transparent), за да се показва НАД
+ * отворен `SheetModal` — приключване на договор например се пуска отвътре в sheet.
+ * Цветовете/типографията/радиусите идват от темата (dark/light), а разрушителното
+ * действие е във `danger` тон (червено), не в стандартното синьо.
+ * ------------------------------------------------------------------ */
+
+function ConfirmCard({ request, onResolve }: { request: ConfirmRequest; onResolve: (result: boolean) => void }) {
+  const t = useTheme();
+  const tone: Tone = request.tone === 'danger' ? 'danger' : 'primary';
+  const accent = toneColors(t, tone).fg;
+  return (
+    <View
+      style={{
+        width: '100%',
+        maxWidth: 380,
+        backgroundColor: t.card,
+        borderRadius: radius.lg,
+        padding: spacing.xl,
+        borderWidth: 1,
+        borderColor: t.border,
+        ...shadow.lg,
+        shadowColor: t.shadowColor,
+      }}>
+      <Text style={{ fontSize: 18, fontWeight: '800', color: t.text, letterSpacing: -0.3 }}>{request.title}</Text>
+      {request.message ? (
+        <Text style={{ fontSize: 14, color: t.textSecondary, marginTop: spacing.sm, lineHeight: 20 }}>{request.message}</Text>
+      ) : null}
+      <View style={{ flexDirection: 'row', gap: spacing.md, marginTop: spacing.xl }}>
+        <Button label={request.cancelLabel ?? 'Отказ'} variant="secondary" onPress={() => onResolve(false)} fullWidth />
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={() => onResolve(true)}
+          style={{
+            flex: 1,
+            backgroundColor: accent,
+            borderRadius: radius.md,
+            paddingVertical: 14,
+            paddingHorizontal: spacing.xl,
+            alignItems: 'center',
+            justifyContent: 'center',
+            ...shadow.sm,
+            shadowColor: accent,
+            shadowOpacity: 0.3,
+          }}>
+          <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{request.confirmLabel}</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+/** Mount once near the app root (inside the SafeAreaProvider), alongside `ToastHost`. */
+export function ConfirmHost() {
+  const current = useConfirmStore((s) => s.current);
+  const close = useConfirmStore((s) => s.close);
+  const t = useTheme();
+  const insets = useSafeAreaInsets();
+
+  return (
+    <Modal
+      visible={!!current}
+      transparent
+      statusBarTranslucent
+      animationType="fade"
+      onRequestClose={() => close(false)}>
+      <View style={{ flex: 1 }}>
+        {/* Тап извън картата = отказ (безопасният избор). */}
+        <Pressable
+          onPress={() => close(false)}
+          style={[StyleSheet.absoluteFill, { backgroundColor: t.overlay }]}
+        />
+        <View
+          pointerEvents="box-none"
+          style={{
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingHorizontal: spacing.xl,
+            paddingTop: insets.top + spacing.xl,
+            paddingBottom: insets.bottom + spacing.xl,
+          }}>
+          {current ? <ConfirmCard request={current} onResolve={close} /> : null}
+        </View>
+      </View>
+    </Modal>
   );
 }
 

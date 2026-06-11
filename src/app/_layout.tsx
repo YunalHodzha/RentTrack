@@ -12,7 +12,7 @@ import { requestNotificationPermissions, schedulePaymentReminders, setupNotifica
 import { useSettingsStore } from '@/store/settings';
 import { useAuthStore } from '@/store/auth';
 import { setupSyncTriggers } from '@/services/sync-runtime';
-import { Loading, ToastHost, ErrorState } from '@/components/ui';
+import { Loading, ToastHost, ConfirmHost, ErrorState } from '@/components/ui';
 import { AuthScreen } from '@/components/auth-screen';
 import { useTheme } from '@/theme';
 
@@ -88,6 +88,8 @@ export default function RootLayout() {
         )}
         {/* Над всичко (вкл. auth екрана) — единната обратна връзка. */}
         <ToastHost />
+        {/* Потвържденията за разрушителни действия — над всичко, вкл. отворен SheetModal. */}
+        <ConfirmHost />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

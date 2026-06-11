@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { View, Text, ScrollView, Alert, Share } from 'react-native';
+import { View, Text, ScrollView, Share } from 'react-native';
 import { useFocusEffect } from '@react-navigation/core';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
@@ -11,6 +11,7 @@ import { useSettingsStore } from '@/store/settings';
 import { useAuthStore } from '@/store/auth';
 import { useSyncStore } from '@/store/sync';
 import { toast } from '@/store/toast';
+import { confirm } from '@/store/confirm';
 import { syncNow } from '@/services/sync-runtime';
 import { schedulePaymentReminders } from '@/services/notifications';
 import { exportDataAsJSON, exportDataAsCSV, importDataFromJSON } from '@/services/export';
@@ -82,18 +83,11 @@ export default function SettingsScreen() {
     }
   }
 
-  function handleSignOut() {
-    Alert.alert('Изход', 'Сигурни ли сте, че искате да излезете?', [
-      { text: 'Отказ', style: 'cancel' },
-      {
-        text: 'Изход',
-        style: 'destructive',
-        onPress: async () => {
-          await signOut();
-          toast.success('Излязохте от профила');
-        },
-      },
-    ]);
+  async function handleSignOut() {
+    if (await confirm({ title: 'Изход', message: 'Сигурни ли сте, че искате да излезете?', confirmLabel: 'Изход', tone: 'danger' })) {
+      await signOut();
+      toast.success('Излязохте от профила');
+    }
   }
 
   async function handleImportJSON() {
@@ -107,27 +101,22 @@ export default function SettingsScreen() {
       const asset = result.assets[0];
       const json = await new File(asset.uri).text();
 
-      Alert.alert(
-        'Възстановяване на данни',
-        'Това ще ЗАМЕНИ всички текущи данни с тези от файла. Сигурни ли сте?',
-        [
-          { text: 'Отказ', style: 'cancel' },
-          {
-            text: 'Възстанови',
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                const counts = importDataFromJSON(json);
-                await schedulePaymentReminders();
-                toast.success(`Възстановени: ${counts.properties} имота, ${counts.tenants} наематели, ${counts.leases} договора, ${counts.payments} плащания`);
-              } catch (err) {
-                toast.error(err instanceof Error ? err.message : 'Неуспешно внасяне на данните');
-                console.error(err);
-              }
-            },
-          },
-        ]
-      );
+      const ok = await confirm({
+        title: 'Възстановяване на данни',
+        message: 'Това ще ЗАМЕНИ всички текущи данни с тези от файла. Сигурни ли сте?',
+        confirmLabel: 'Възстанови',
+        tone: 'danger',
+      });
+      if (!ok) return;
+
+      try {
+        const counts = importDataFromJSON(json);
+        await schedulePaymentReminders();
+        toast.success(`Възстановени: ${counts.properties} имота, ${counts.tenants} наематели, ${counts.leases} договора, ${counts.payments} плащания`);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Неуспешно внасяне на данните');
+        console.error(err);
+      }
     } catch (error) {
       toast.error('Неуспешно отваряне на файла');
       console.error(error);

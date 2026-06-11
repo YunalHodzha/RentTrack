@@ -11,6 +11,7 @@ import { ownedAndLive, currentUserId, requireUserId, withOwner } from '@/db/owne
 import { softDeleteProperty, softDeletePayment } from '@/db/soft-delete';
 import { generateId } from '@/lib/uuid';
 import { toast } from '@/store/toast';
+import { confirm } from '@/store/confirm';
 import { schedulePaymentReminders } from '@/services/notifications';
 import {
   Screen, Card, Badge, IconBadge, SectionTitle, Button, Field, Input, ChipGroup,
@@ -119,27 +120,25 @@ export default function PropertyDetailScreen() {
     return tenant;
   }
 
-  function handleEndLease() {
+  async function handleEndLease() {
     if (!activeLease || !property) return;
-    Alert.alert('Приключи договора', 'Сигурни ли сте? Имотът ще бъде маркиран като свободен.', [
-      { text: 'Отказ', style: 'cancel' },
-      {
-        text: 'Приключи',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            const today = new Date().toISOString().split('T')[0];
-            const now = new Date().toISOString();
-            await db.update(leases).set({ status: 'ended', endDate: today, updatedAt: now }).where(eq(leases.id, activeLease.id));
-            await db.update(properties).set({ status: 'free', updatedAt: now }).where(eq(properties.id, property.id));
-            await loadData();
-            toast.success('Договорът е приключен');
-          } catch {
-            toast.error('Неуспешно приключване на договора');
-          }
-        },
-      },
-    ]);
+    const ok = await confirm({
+      title: 'Приключи договора',
+      message: 'Сигурни ли сте? Имотът ще бъде маркиран като свободен.',
+      confirmLabel: 'Приключи',
+      tone: 'danger',
+    });
+    if (!ok) return;
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const now = new Date().toISOString();
+      await db.update(leases).set({ status: 'ended', endDate: today, updatedAt: now }).where(eq(leases.id, activeLease.id));
+      await db.update(properties).set({ status: 'free', updatedAt: now }).where(eq(properties.id, property.id));
+      await loadData();
+      toast.success('Договорът е приключен');
+    } catch {
+      toast.error('Неуспешно приключване на договора');
+    }
   }
 
   async function handleSavePayment(rows: PaymentInput[]) {
@@ -172,26 +171,24 @@ export default function PropertyDetailScreen() {
     }
   }
 
-  function handleDeletePayment(payment: Payment) {
-    Alert.alert('Изтриване на плащане', `Да изтрия ли плащането за ${formatPeriod(payment.period)}?`, [
-      { text: 'Отказ', style: 'cancel' },
-      {
-        text: 'Изтрий',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await softDeletePayment(db, payment.id);
-            await loadData();
-            await schedulePaymentReminders();
-            toast.success('Плащането е изтрито');
-          } catch {
-            toast.error('Неуспешно изтриване на плащането');
-          } finally {
-            setPaymentModal(null);
-          }
-        },
-      },
-    ]);
+  async function handleDeletePayment(payment: Payment) {
+    const ok = await confirm({
+      title: 'Изтриване на плащане',
+      message: `Да изтрия ли плащането за ${formatPeriod(payment.period)}?`,
+      confirmLabel: 'Изтрий',
+      tone: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await softDeletePayment(db, payment.id);
+      await loadData();
+      await schedulePaymentReminders();
+      toast.success('Плащането е изтрито');
+    } catch {
+      toast.error('Неуспешно изтриране на плащането');
+    } finally {
+      setPaymentModal(null);
+    }
   }
 
   async function handleEditProperty(data: { name: string; address: string | null; type: Property['type']; notes: string | null }) {
@@ -218,28 +215,26 @@ export default function PropertyDetailScreen() {
     }
   }
 
-  function handleDeleteProperty() {
+  async function handleDeleteProperty() {
     if (!property) return;
     if (activeLease) {
       toast.error('Изтриването е блокирано: има активен договор');
       return;
     }
-    Alert.alert('Изтриване на имот', `Сигурни ли сте, че искате да изтриете „${property.name}“?`, [
-      { text: 'Отказ', style: 'cancel' },
-      {
-        text: 'Изтрий',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await softDeleteProperty(db, property.id);
-            toast.success('Имотът е изтрит');
-            router.back();
-          } catch {
-            toast.error('Неуспешно изтриране на имота');
-          }
-        },
-      },
-    ]);
+    const ok = await confirm({
+      title: 'Изтриване на имот',
+      message: `Сигурни ли сте, че искате да изтриете „${property.name}“?`,
+      confirmLabel: 'Изтрий',
+      tone: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await softDeleteProperty(db, property.id);
+      toast.success('Имотът е изтрит');
+      router.back();
+    } catch {
+      toast.error('Неуспешно изтриране на имота');
+    }
   }
 
   const showLoading = useDelayedFlag(loading);
