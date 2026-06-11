@@ -12,10 +12,13 @@ import { useAuthStore } from '@/store/auth';
 import { useSyncStore } from '@/store/sync';
 import { toast } from '@/store/toast';
 import { confirm } from '@/store/confirm';
-import { syncNow } from '@/services/sync-runtime';
+import { syncNow, withSyncPaused } from '@/services/sync-runtime';
 import { schedulePaymentReminders, cancelScheduledReminders } from '@/services/notifications';
-import { exportDataAsJSON, exportDataAsCSV, importDataFromJSON } from '@/services/export';
+import { exportDataAsJSON, exportDataAsCSV } from '@/services/export';
+import { parseImportFile, applyImport } from '@/services/import';
 import { deleteAccount } from '@/services/account';
+import { db } from '@/db/client';
+import { currentUserId } from '@/db/owner';
 import type { Currency } from '@/lib/domain';
 
 const CURRENCIES = [
@@ -107,20 +110,41 @@ export default function SettingsScreen() {
       const asset = result.assets[0];
       const json = await new File(asset.uri).text();
 
+      // Валидация преди каквото и да е писане — невалиден файл = нула промени.
+      let file: ReturnType<typeof parseImportFile>;
+      try {
+        file = parseImportFile(json);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Файлът не е валиден RentTrack експорт.');
+        return;
+      }
+
+      const uid = currentUserId();
+      if (!uid) {
+        toast.error('Няма вписан потребител.');
+        return;
+      }
+
       const ok = await confirm({
         title: 'Възстановяване на данни',
-        message: 'Това ще ЗАМЕНИ всички текущи данни с тези от файла. Сигурни ли сте?',
+        message:
+          `Това ще ЗАМЕНИ всички данни в приложението И в облака с тези от файла ` +
+          `(${file.properties.length} имота, ${file.tenants.length} наематели, ${file.leases.length} договора, ${file.payments.length} плащания). Сигурни ли сте?`,
         confirmLabel: 'Възстанови',
         tone: 'danger',
       });
       if (!ok) return;
 
       try {
-        const counts = importDataFromJSON(json);
+        // Под sync mutex-а, за да не пише фонов sync по средата; после веднага
+        // качваме tombstone-ите и новите редове (тихо при offline — следващият
+        // тригер ги поема). Екраните се презареждат при фокус (useFocusReload).
+        const counts = await withSyncPaused(() => applyImport(db, file, uid));
+        void syncNow();
         await schedulePaymentReminders();
         toast.success(`Възстановени: ${counts.properties} имота, ${counts.tenants} наематели, ${counts.leases} договора, ${counts.payments} плащания`);
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Неуспешно внасяне на данните');
+        toast.error('Неуспешно внасяне на данните — нищо не е променено.');
         console.error(err);
       }
     } catch (error) {
@@ -231,7 +255,7 @@ export default function SettingsScreen() {
         <SectionTitle>Възстановяване на данни</SectionTitle>
         <Card style={{ marginBottom: spacing.lg }}>
           <Text style={{ fontSize: 13, color: t.textMuted, marginBottom: spacing.lg }}>
-            Внесете данни от JSON архив. Това ще замени всички текущи данни.
+            Внесете данни от JSON архив. Това ще замени всички текущи данни в приложението и в облака.
           </Text>
           <Button label="Внеси от JSON" variant="secondary" onPress={handleImportJSON} fullWidth />
         </Card>
