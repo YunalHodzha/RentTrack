@@ -5,11 +5,16 @@ import { format } from 'date-fns';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { db } from '@/db/client';
 import { properties, leases, payments } from '@/db/schema';
+import type { Lease, Property } from '@/db/schema';
 import { ownedAndLive, currentUserId } from '@/db/owner';
 import { useAppStore } from '@/store';
+import { toast } from '@/store/toast';
+import { schedulePaymentReminders } from '@/services/notifications';
+import { savePayments, type PaymentInput } from '@/services/payments';
+import { PaymentModal } from '@/components/payment-form';
 import { useFocusReload } from '@/hooks/use-focus-reload';
 import { useLoadingState } from '@/hooks/use-loading-state';
-import { Header, Card, ProgressBar, Button, EmptyState, Skeleton, ErrorState, useTheme, spacing, radius, shadow } from '@/components/ui';
+import { Header, Card, Badge, ProgressBar, Button, EmptyState, Skeleton, ErrorState, SheetModal, useTheme, spacing, radius, shadow } from '@/components/ui';
 import { formatMoney, formatPeriod, overduePeriodsForLease, type Currency } from '@/lib/domain';
 import { onboardingSteps, type OnboardingStep } from '@/lib/onboarding';
 
@@ -18,6 +23,8 @@ export default function DashboardScreen() {
   const { properties: props, leases: leaseList, payments: payList, setProperties, setLeases, setPayments } = useAppStore();
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
+  const [leaseSelectVisible, setLeaseSelectVisible] = useState(false);
+  const [paymentLease, setPaymentLease] = useState<Lease | null>(null);
 
   const loadAll = useCallback(async () => {
     const uid = currentUserId();
@@ -112,10 +119,46 @@ export default function DashboardScreen() {
   const overdueLeaseCount = overdueByLease.length;
   const overduePeriodCount = overdueByLease.reduce((sum, periods) => sum + periods.length, 0);
 
+  // Бързо „Запиши плащане": активни договори, подредени — първо просрочени, после
+  // дължащи текущия месец, после останалите. Преизползва вече групираните плащания.
+  const recordableLeases = activeLeases
+    .map((lease) => {
+      const lp = paymentsByLease.get(lease.id) ?? [];
+      const overdue = overduePeriodsForLease(lease, lp, today).length > 0;
+      const owesCurrent = !lp.some((p) => p.period === currentPeriod && p.status === 'paid');
+      return { lease, overdue, owesCurrent, priority: overdue ? 2 : owesCurrent ? 1 : 0 };
+    })
+    .sort((a, b) => b.priority - a.priority);
+
+  function openRecordPayment() {
+    // Един договор → директно към формата; иначе селектор.
+    if (recordableLeases.length === 1) setPaymentLease(recordableLeases[0].lease);
+    else setLeaseSelectVisible(true);
+  }
+
+  async function handleRecordPayment(rows: PaymentInput[]) {
+    if (!paymentLease) return;
+    try {
+      await savePayments(paymentLease.id, 'add', rows);
+      await loadAll();
+      await schedulePaymentReminders();
+      toast.success(rows.length > 1 ? 'Плащанията са записани' : 'Плащането е записано');
+    } catch {
+      toast.error('Неуспешно записване на плащането');
+    } finally {
+      setPaymentLease(null);
+    }
+  }
+
+  const paymentLeasePeriods = paymentLease
+    ? payList.filter((p) => p.leaseId === paymentLease.id).map((p) => p.period)
+    : [];
+
   const monthLabel = formatPeriod(currentPeriod);
   const monthCapitalized = monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1);
 
   return (
+    <>
     <ScrollView style={{ flex: 1, backgroundColor: t.bg }} contentContainerStyle={{ paddingBottom: 40 }}>
       <Header title="Табло" subtitle={monthCapitalized} />
 
@@ -159,6 +202,11 @@ export default function DashboardScreen() {
           <StatTile label="Събрано" sub={monthCapitalized} value={fmtMap(collectedBy)} tone="success" />
           <StatTile label="Дължимо" sub={monthCapitalized} value={fmtMap(owedBy)} tone={totalOwed > 0 ? 'warning' : 'success'} />
         </View>
+
+        {/* Бързо записване на плащане (избор на договор → формата за плащане) */}
+        {recordableLeases.length > 0 ? (
+          <Button label="+ Запиши плащане" onPress={openRecordPayment} fullWidth />
+        ) : null}
 
         {/* Occupancy */}
         {props.length > 0 ? (
@@ -213,6 +261,63 @@ export default function DashboardScreen() {
       </View>
       )}
     </ScrollView>
+
+    {leaseSelectVisible ? (
+      <LeaseSelectModal
+        leases={recordableLeases}
+        properties={props}
+        onClose={() => setLeaseSelectVisible(false)}
+        onSelect={(lease) => { setLeaseSelectVisible(false); setPaymentLease(lease); }}
+      />
+    ) : null}
+
+    {paymentLease ? (
+      <PaymentModal
+        state={{ mode: 'add' }}
+        currency={paymentLease.currency as Currency}
+        defaultAmount={paymentLease.rentAmount}
+        takenPeriods={paymentLeasePeriods}
+        onClose={() => setPaymentLease(null)}
+        onSubmit={handleRecordPayment}
+        onDelete={() => { /* add режим няма изтриване */ }}
+      />
+    ) : null}
+    </>
+  );
+}
+
+/**
+ * Селектор на активен договор за бързото „Запиши плащане". Подреден отвън —
+ * първо просрочени/дължащи. Натискане отваря споделената форма за плащане.
+ */
+function LeaseSelectModal({ leases, properties, onSelect, onClose }: {
+  leases: { lease: Lease; overdue: boolean; owesCurrent: boolean }[];
+  properties: Property[];
+  onSelect: (lease: Lease) => void;
+  onClose: () => void;
+}) {
+  const t = useTheme();
+  return (
+    <SheetModal visible onClose={onClose} title="Изберете договор">
+      <View style={{ gap: spacing.md }}>
+        {leases.map(({ lease, overdue, owesCurrent }) => {
+          const propName = properties.find((p) => p.id === lease.propertyId)?.name ?? '—';
+          return (
+            <Card key={lease.id} onPress={() => onSelect(lease)}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <View style={{ flex: 1, marginRight: spacing.md }}>
+                  <Text style={{ fontSize: 15, fontWeight: '700', color: t.text }} numberOfLines={1}>{propName}</Text>
+                  <Text style={{ fontSize: 13, color: t.textSecondary, marginTop: 2 }}>
+                    {formatMoney(lease.rentAmount, lease.currency as Currency)} / месец
+                  </Text>
+                </View>
+                {overdue ? <Badge label="Просрочен" tone="danger" /> : owesCurrent ? <Badge label="Дължи" tone="warning" /> : null}
+              </View>
+            </Card>
+          );
+        })}
+      </View>
+    </SheetModal>
   );
 }
 
