@@ -697,13 +697,20 @@ export function SheetModal({
   children: React.ReactNode;
 }) {
   const t = useTheme();
+  const insets = useSafeAreaInsets();
+  // На Android модалът е цял екран (edge-to-edge от SDK 54 → рисува под status
+  // bar-а), затова хедърът „Отказ / Запази" се бута под него с горния safe-area
+  // inset. На iOS pageSheet-ът стои под status bar-а, а вътре useSafeAreaInsets
+  // връща root (устройствения) inset → добавянето му тук би пре-паднало; затова
+  // там оставяме оригиналния отстъп.
+  const headerTopPad = Platform.OS === 'android' ? insets.top + spacing.md : spacing.xl;
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: t.bg }}>
         <View
           style={{
             flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-            paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, paddingTop: spacing.xl,
+            paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, paddingTop: headerTopPad,
             backgroundColor: t.card, borderBottomWidth: 1, borderBottomColor: t.border,
           }}>
           <TouchableOpacity onPress={onClose} hitSlop={8}>
