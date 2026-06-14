@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { View, Text, FlatList, RefreshControl } from 'react-native';
+import { View, Text, FlatList, RefreshControl, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db/client';
@@ -17,7 +17,7 @@ import { generateId } from '@/lib/uuid';
 import { canAddProperty } from '@/lib/entitlement';
 import {
   Screen, Header, Card, Badge, IconBadge, FAB, EmptyState, ListSkeleton, ErrorState, Button,
-  SheetModal, Field, Input, ChipGroup, SwipeableRow, useTheme, spacing,
+  SheetModal, Field, Input, ChipGroup, SwipeableRow, useTheme, spacing, radius,
 } from '@/components/ui';
 import { useLoadingState } from '@/hooks/use-loading-state';
 import { PROPERTY_TYPES, TYPE_LABELS, TYPE_ICONS, STATUS_LABELS, STATUS_TONE, deleteCascadeWarning } from '@/lib/domain';
@@ -207,6 +207,10 @@ function PropertyFilters({ query, onQuery, status, onStatus, type, onType }: {
   type: 'all' | Property['type'];
   onType: (v: 'all' | Property['type']) => void;
 }) {
+  const t = useTheme();
+  // Свити по подразбиране — статус/тип чиповете заемаха половин екран постоянно.
+  // Търсенето остава видимо (компактно, един ред); зад „Филтри" стоят чиповете.
+  const [expanded, setExpanded] = useState(false);
   const statusOptions: { value: 'all' | Property['status']; label: string }[] = [
     { value: 'all', label: 'Всички' },
     { value: 'free', label: STATUS_LABELS.free },
@@ -217,11 +221,36 @@ function PropertyFilters({ query, onQuery, status, onStatus, type, onType }: {
     { value: 'all', label: 'Всички' },
     ...PROPERTY_TYPES.map((v) => ({ value: v, label: TYPE_LABELS[v] })),
   ];
+  const activeCount = (status !== 'all' ? 1 : 0) + (type !== 'all' ? 1 : 0);
   return (
     <View style={{ paddingHorizontal: spacing.xl, paddingBottom: spacing.md, gap: spacing.md }}>
-      <Input value={query} onChangeText={onQuery} placeholder="Търсене по име или адрес" autoCapitalize="none" />
-      <ChipGroup options={statusOptions} value={status} onChange={onStatus} />
-      <ChipGroup options={typeOptions} value={type} onChange={onType} />
+      <View style={{ flexDirection: 'row', gap: spacing.md, alignItems: 'center' }}>
+        <View style={{ flex: 1 }}>
+          <Input value={query} onChangeText={onQuery} placeholder="Търсене по име или адрес" autoCapitalize="none" />
+        </View>
+        <TouchableOpacity
+          onPress={() => setExpanded((v) => !v)}
+          accessibilityRole="button"
+          accessibilityLabel={expanded ? 'Скрий филтрите' : 'Покажи филтрите'}
+          style={{
+            flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
+            paddingHorizontal: 14, paddingVertical: 12, borderRadius: radius.md,
+            backgroundColor: activeCount > 0 ? t.primary : t.inputBg,
+            borderWidth: 1, borderColor: activeCount > 0 ? t.primary : t.inputBorder,
+          }}>
+          <Text style={{ fontSize: 14, fontWeight: '700', color: activeCount > 0 ? t.onPrimary : t.text }}>
+            Филтри{activeCount > 0 ? ` (${activeCount})` : ''}
+          </Text>
+          <Text style={{ fontSize: 12, fontWeight: '800', color: activeCount > 0 ? t.onPrimary : t.textMuted }}>{expanded ? '▾' : '▸'}</Text>
+        </TouchableOpacity>
+      </View>
+
+      {expanded ? (
+        <View style={{ gap: spacing.md }}>
+          <ChipGroup options={statusOptions} value={status} onChange={onStatus} />
+          <ChipGroup options={typeOptions} value={type} onChange={onType} />
+        </View>
+      ) : null}
     </View>
   );
 }
