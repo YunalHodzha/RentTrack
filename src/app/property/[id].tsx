@@ -13,6 +13,8 @@ import { generateId } from '@/lib/uuid';
 import { toast } from '@/store/toast';
 import { confirm } from '@/store/confirm';
 import { schedulePaymentReminders } from '@/services/notifications';
+import { createActiveLease, type NewLeaseInput } from '@/services/leases';
+import { LeaseFormModal } from '@/components/lease-form';
 import {
   Screen, Card, Badge, IconBadge, SectionTitle, Button, Field, Input, ChipGroup,
   InfoRow, Divider, EmptyState, Loading, ErrorState, SheetModal, DateField, MonthField,
@@ -82,15 +84,10 @@ export default function PropertyDetailScreen() {
 
   const currency: Currency = (activeLease?.currency as Currency) ?? 'EUR';
 
-  async function handleAddLease(data: {
-    tenantId: string; rentAmount: number; currency: Currency; paymentDay: number;
-    startDate: string; endDate: string | null; depositAmount: number | null; notes: string | null;
-  }) {
+  async function handleAddLease(data: NewLeaseInput) {
     if (!property) return;
     try {
-      const now = new Date().toISOString();
-      await db.insert(leases).values(withOwner({ id: generateId(), propertyId: property.id, status: 'active', createdAt: now, updatedAt: now, ...data }));
-      await db.update(properties).set({ status: 'rented', updatedAt: now }).where(eq(properties.id, property.id));
+      await createActiveLease(data);
       await loadData();
       toast.success('Договорът е създаден');
     } catch {
@@ -101,8 +98,8 @@ export default function PropertyDetailScreen() {
   }
 
   // Create a tenant inline from the lease modal. Persists to the DB (so it also
-  // shows up in the Наематели tab) and updates the in-modal list so it can be
-  // selected immediately.
+  // shows up in the Наематели tab); the modal keeps its own in-list copy so the
+  // new tenant can be selected immediately.
   async function handleCreateTenant(data: { name: string; phone: string | null }): Promise<Tenant> {
     const now = new Date().toISOString();
     const tenant: Tenant = {
@@ -117,7 +114,6 @@ export default function PropertyDetailScreen() {
       deletedAt: null,
     };
     await db.insert(tenants).values(tenant);
-    setAllTenants((prev) => [...prev, tenant]);
     return tenant;
   }
 
@@ -414,9 +410,10 @@ export default function PropertyDetailScreen() {
       </Screen>
 
       {addLeaseVisible ? (
-        <AddLeaseModal
-          visible={addLeaseVisible}
-          tenantList={allTenants}
+        <LeaseFormModal
+          mode="pickTenant"
+          propertyId={property.id}
+          tenants={allTenants}
           onClose={() => setAddLeaseVisible(false)}
           onSave={handleAddLease}
           onCreateTenant={handleCreateTenant}
@@ -455,161 +452,6 @@ function StatusLine({ tone, text }: { tone: Tone; text: string }) {
       <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: color }} />
       <Text style={{ fontSize: 15, color, fontWeight: '700' }}>{text}</Text>
     </View>
-  );
-}
-
-function AddLeaseModal({ visible, tenantList, onClose, onSave, onCreateTenant }: {
-  visible: boolean;
-  tenantList: Tenant[];
-  onClose: () => void;
-  onSave: (data: { tenantId: string; rentAmount: number; currency: Currency; paymentDay: number; startDate: string; endDate: string | null; depositAmount: number | null; notes: string | null }) => void;
-  onCreateTenant: (data: { name: string; phone: string | null }) => Promise<Tenant>;
-}) {
-  const t = useTheme();
-  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
-  const [rentAmount, setRentAmount] = useState('');
-  const [currency, setCurrency] = useState<Currency>('EUR');
-  const [paymentDay, setPaymentDay] = useState('1');
-  const [startDate, setStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [endDate, setEndDate] = useState<string | null>(null);
-  const [depositAmount, setDepositAmount] = useState('');
-  const [notes, setNotes] = useState('');
-  const [errors, setErrors] = useState<{ tenant?: string; amount?: string; day?: string; startDate?: string; endDate?: string; newName?: string }>({});
-
-  // Inline "new tenant" mini-form state.
-  const [showNewTenant, setShowNewTenant] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newPhone, setNewPhone] = useState('');
-  const [creating, setCreating] = useState(false);
-
-  function clearError(key: keyof typeof errors) {
-    setErrors((e) => (e[key] ? { ...e, [key]: undefined } : e));
-  }
-
-  function resetNewTenant() { setShowNewTenant(false); setNewName(''); setNewPhone(''); clearError('newName'); }
-
-  function reset() {
-    setSelectedTenantId(null); setRentAmount(''); setCurrency('EUR');
-    setPaymentDay('1'); setStartDate(format(new Date(), 'yyyy-MM-dd')); setEndDate(null);
-    setDepositAmount(''); setNotes('');
-    setErrors({});
-    resetNewTenant();
-  }
-
-  async function handleCreateTenant() {
-    if (!newName.trim()) { setErrors((e) => ({ ...e, newName: 'Въведете име' })); return; }
-    setCreating(true);
-    try {
-      const tenant = await onCreateTenant({ name: newName.trim(), phone: newPhone.trim() || null });
-      setSelectedTenantId(tenant.id);
-      clearError('tenant');
-      resetNewTenant();
-    } catch {
-      // Toast не се вижда над отворен SheetModal, затова грешката е inline.
-      setErrors((e) => ({ ...e, newName: 'Неуспешно добавяне на наемател' }));
-    } finally {
-      setCreating(false);
-    }
-  }
-
-  function handleSave() {
-    const next: typeof errors = {};
-    if (!selectedTenantId) next.tenant = 'Изберете наемател';
-    const amount = parseFloat(rentAmount);
-    if (!rentAmount || isNaN(amount) || amount <= 0) next.amount = 'Въведете валидна сума';
-    const day = parseInt(paymentDay, 10);
-    if (isNaN(day) || day < 1 || day > 31) next.day = 'Денят трябва да е между 1 и 31';
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) next.startDate = 'Изберете начална дата';
-    if (endDate && endDate < startDate) next.endDate = 'Крайната дата не може да е преди началната';
-    if (Object.values(next).some(Boolean)) { setErrors(next); return; }
-    const deposit = depositAmount ? parseFloat(depositAmount) : null;
-    onSave({ tenantId: selectedTenantId!, rentAmount: amount, currency, paymentDay: day, startDate, endDate, depositAmount: deposit && !isNaN(deposit) ? deposit : null, notes: notes.trim() || null });
-    reset();
-  }
-
-  function handleClose() { reset(); onClose(); }
-
-  return (
-    <SheetModal visible={visible} onClose={handleClose} onSave={handleSave} title="Нов договор">
-      <Field label="Наемател *" error={errors.tenant}>
-        <View style={{ gap: spacing.sm }}>
-          {tenantList.map((tenant) => {
-            const active = selectedTenantId === tenant.id;
-            return (
-              <TouchableOpacity
-                key={tenant.id}
-                activeOpacity={0.8}
-                onPress={() => { setSelectedTenantId(tenant.id); clearError('tenant'); }}
-                style={{
-                  padding: 14, borderRadius: radius.md,
-                  backgroundColor: active ? t.primarySoft : t.inputBg,
-                  borderWidth: 1, borderColor: active ? t.primary : t.inputBorder,
-                }}>
-                <Text style={{ color: active ? t.primary : t.text, fontWeight: active ? '800' : '500', fontSize: 15 }}>{tenant.name}</Text>
-                {tenant.phone ? <Text style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{tenant.phone}</Text> : null}
-              </TouchableOpacity>
-            );
-          })}
-
-          {tenantList.length === 0 && !showNewTenant ? (
-            <Text style={{ color: t.textSecondary, fontSize: 14 }}>Все още няма наематели. Добавете нов по-долу.</Text>
-          ) : null}
-
-          {showNewTenant ? (
-            <View style={{ backgroundColor: t.inputBg, borderRadius: radius.md, padding: 14, borderWidth: 1, borderColor: t.inputBorder, gap: spacing.sm }}>
-              <Input value={newName} onChangeText={(v) => { setNewName(v); clearError('newName'); }} placeholder="Име на наемателя *" error={!!errors.newName} />
-              {errors.newName ? (
-                <Text accessibilityRole="alert" style={{ fontSize: 12, fontWeight: '600', color: t.danger }}>{errors.newName}</Text>
-              ) : null}
-              <Input value={newPhone} onChangeText={setNewPhone} placeholder="Телефон (по избор)" keyboardType="phone-pad" />
-              <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs }}>
-                <Button label="Откажи" variant="secondary" onPress={resetNewTenant} style={{ flex: 1 }} />
-                <Button label={creating ? 'Добавяне…' : 'Добави'} onPress={handleCreateTenant} disabled={creating} style={{ flex: 1 }} />
-              </View>
-            </View>
-          ) : (
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => setShowNewTenant(true)}
-              style={{
-                padding: 14, borderRadius: radius.md, alignItems: 'center',
-                borderWidth: 1, borderColor: t.primary, borderStyle: 'dashed',
-              }}>
-              <Text style={{ color: t.primary, fontWeight: '700', fontSize: 15 }}>+ Нов наемател</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </Field>
-
-      <Field label="Наемна сума *" error={errors.amount}>
-        <Input value={rentAmount} onChangeText={(v) => { setRentAmount(v); clearError('amount'); }} placeholder="0" keyboardType="decimal-pad" error={!!errors.amount} />
-      </Field>
-
-      <Field label="Валута">
-        <ChipGroup options={[{ value: 'EUR', label: 'EUR €' }, { value: 'BGN', label: 'BGN лв.' }]} value={currency} onChange={setCurrency} />
-      </Field>
-
-      <Field label="Ден за плащане *" hint="Число от 1 до 31" error={errors.day}>
-        <Input value={paymentDay} onChangeText={(v) => { setPaymentDay(v); clearError('day'); }} placeholder="1" keyboardType="number-pad" error={!!errors.day} />
-      </Field>
-
-      <Field label="Начална дата *" error={errors.startDate}>
-        {/* Крайната дата зависи от началната, затова редакция тук чисти и нейната грешка. */}
-        <DateField value={startDate} onChange={(v) => { setStartDate(v); clearError('startDate'); clearError('endDate'); }} />
-      </Field>
-
-      <Field label="Крайна дата" hint="По избор — за срочен договор; справките очакват плащания само до този месец" error={errors.endDate}>
-        <DateField value={endDate} onChange={(v) => { setEndDate(v); clearError('endDate'); }} onClear={() => { setEndDate(null); clearError('endDate'); }} placeholder="По избор" />
-      </Field>
-
-      <Field label="Депозит">
-        <Input value={depositAmount} onChangeText={setDepositAmount} placeholder="По избор" keyboardType="decimal-pad" />
-      </Field>
-
-      <Field label="Бележки">
-        <Input value={notes} onChangeText={setNotes} placeholder="По избор" multiline />
-      </Field>
-    </SheetModal>
   );
 }
 

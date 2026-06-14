@@ -10,6 +10,8 @@ import { ownedAndLive, currentUserId } from '@/db/owner';
 import { softDeleteTenant } from '@/db/soft-delete';
 import { toast } from '@/store/toast';
 import { confirm } from '@/store/confirm';
+import { createActiveLease, type NewLeaseInput } from '@/services/leases';
+import { LeaseFormModal } from '@/components/lease-form';
 import {
   Screen, Card, Badge, Avatar, SectionTitle, Button, Field, Input,
   InfoRow, Divider, EmptyState, Loading, ErrorState, SheetModal, useTheme, spacing, radius,
@@ -34,6 +36,8 @@ export default function TenantDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [editVisible, setEditVisible] = useState(false);
+  const [addLeaseVisible, setAddLeaseVisible] = useState(false);
+  const [freeProperties, setFreeProperties] = useState<Property[]>([]);
 
   const loadData = useCallback(async () => {
     const uid = currentUserId();
@@ -85,6 +89,36 @@ export default function TenantDetailScreen() {
       toast.error('Неуспешно обновяване на наемателя');
     } finally {
       setEditVisible(false);
+    }
+  }
+
+  // Договор от екрана на наемателя: наемателят е известен, избира се свободен
+  // имот (без активен договор). Picker-ът се пълни при отваряне, за да е свеж.
+  async function openAddLease() {
+    const uid = currentUserId();
+    if (!uid) return;
+    try {
+      const [allProps, activeLeases] = await Promise.all([
+        db.select().from(properties).where(ownedAndLive(properties, uid)),
+        db.select().from(leases).where(ownedAndLive(leases, uid, eq(leases.status, 'active'))),
+      ]);
+      const taken = new Set(activeLeases.map((l) => l.propertyId));
+      setFreeProperties(allProps.filter((p) => !taken.has(p.id)));
+      setAddLeaseVisible(true);
+    } catch {
+      toast.error('Неуспешно зареждане на имотите');
+    }
+  }
+
+  async function handleAddLease(data: NewLeaseInput) {
+    try {
+      await createActiveLease(data);
+      await loadData();
+      toast.success('Договорът е създаден');
+    } catch {
+      toast.error('Неуспешно създаване на договора');
+    } finally {
+      setAddLeaseVisible(false);
     }
   }
 
@@ -202,7 +236,8 @@ export default function TenantDetailScreen() {
               </Card>
             ) : (
               <Card style={{ alignItems: 'center', paddingVertical: spacing.xxl }}>
-                <Text style={{ fontSize: 14, color: t.textSecondary }}>Няма активен договор</Text>
+                <Text style={{ fontSize: 14, color: t.textSecondary, marginBottom: spacing.lg }}>Няма активен договор</Text>
+                <Button label="+ Добавяне на договор" onPress={openAddLease} />
               </Card>
             )}
           </View>
@@ -252,6 +287,16 @@ export default function TenantDetailScreen() {
 
       {editVisible ? (
         <EditTenantModal tenant={tenant} onClose={() => setEditVisible(false)} onSave={handleEdit} />
+      ) : null}
+
+      {addLeaseVisible ? (
+        <LeaseFormModal
+          mode="pickProperty"
+          tenantId={tenant.id}
+          properties={freeProperties}
+          onClose={() => setAddLeaseVisible(false)}
+          onSave={handleAddLease}
+        />
       ) : null}
     </>
   );
