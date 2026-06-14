@@ -18,11 +18,13 @@ const dsn = process.env.EXPO_PUBLIC_SENTRY_DSN;
 export const isSentryEnabled = Boolean(dsn);
 
 export function initSentry() {
-  if (!dsn) return;
+  // Sentry.init се вика ВИНАГИ и преди Sentry.wrap — иначе wrap предхожда init-а
+  // (предупреждение „Sentry.wrap was called before Sentry.init") и app-start
+  // span-ът се губи. Без DSN просто enabled: false → нищо не се праща. В dev
+  // също не пращаме (за тест на устройство: временно сложи enabled: true тук).
   Sentry.init({
     dsn,
-    // В dev не пращаме нищо (за тест на устройство: временно сложи true).
-    enabled: !__DEV__,
+    enabled: Boolean(dsn) && !__DEV__,
     tracesSampleRate: 0,
     sendDefaultPii: false,
     beforeBreadcrumb(breadcrumb) {

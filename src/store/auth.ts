@@ -63,9 +63,11 @@ export const useAuthStore = create<AuthStore>((set) => ({
   requestPasswordReset: async (email) => {
     if (!supabase) return { error: 'Supabase не е конфигуриран.' };
     // createURL дава правилния deep link и в Expo Go (exp://.../--/reset-password),
-    // и в dev/production build (renttrack://reset-password). URL-ът трябва да е
-    // добавен в Supabase → Authentication → URL Configuration → Redirect URLs.
-    const redirectTo = Linking.createURL('/reset-password');
+    // и в dev/production build (renttrack://reset-password). Без водеща наклонена
+    // черта в пътя — иначе createURL дава renttrack:///reset-password (тройна
+    // черта). URL-ът трябва да е добавен в Supabase → Authentication → URL
+    // Configuration → Redirect URLs.
+    const redirectTo = Linking.createURL('reset-password');
     const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
     return { error: error?.message ?? null };
   },
