@@ -78,7 +78,12 @@ export default function PropertiesScreen() {
     try {
       await db.insert(properties).values(withOwner(data));
       await loadProperties();
-      toast.success('Имотът е добавен');
+      // Верижно CTA: следващата логична стъпка е договор — водим към новия имот
+      // (там е секцията за договор). Дискретно, в toast-а, без насилствена навигация.
+      toast.success('Имотът е добавен', {
+        label: 'Добави договор',
+        onPress: () => router.push(`/property/${data.id}`),
+      });
     } catch {
       toast.error('Неуспешно добавяне на имота');
     } finally {

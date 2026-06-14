@@ -760,11 +760,13 @@ function ToastView({ item, onDismiss }: { item: ToastItem; onDismiss: (id: numbe
 
   useEffect(() => {
     Animated.timing(anim, { toValue: 1, duration: 220, useNativeDriver: true }).start();
+    // Toast-ове с действие стоят по-дълго, за да са натискаеми.
+    const duration = item.action ? 6000 : TOAST_DURATION[item.type];
     const timer = setTimeout(() => {
       Animated.timing(anim, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => onDismiss(item.id));
-    }, TOAST_DURATION[item.type]);
+    }, duration);
     return () => clearTimeout(timer);
-  }, [anim, item.id, item.type, onDismiss]);
+  }, [anim, item.id, item.type, item.action, onDismiss]);
 
   function handlePress() {
     Animated.timing(anim, { toValue: 0, duration: 150, useNativeDriver: true }).start(() => onDismiss(item.id));
@@ -799,6 +801,15 @@ function ToastView({ item, onDismiss }: { item: ToastItem; onDismiss: (id: numbe
         <Text style={{ flex: 1, fontSize: 14, fontWeight: '600', color: t.text, lineHeight: 19 }}>
           {item.message}
         </Text>
+        {item.action ? (
+          <TouchableOpacity
+            onPress={() => { item.action!.onPress(); onDismiss(item.id); }}
+            hitSlop={8}
+            accessibilityRole="button"
+            style={{ paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.sm, backgroundColor: accent + '22' }}>
+            <Text style={{ fontSize: 13, fontWeight: '800', color: accent }}>{item.action.label}</Text>
+          </TouchableOpacity>
+        ) : null}
       </TouchableOpacity>
     </Animated.View>
   );

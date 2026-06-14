@@ -69,7 +69,12 @@ export default function TenantsScreen() {
     try {
       await db.insert(tenants).values(withOwner(data));
       await loadTenants();
-      toast.success('Наемателят е добавен');
+      // Верижно CTA: водим към новия наемател, където договор се добавя с picker
+      // за свободен имот (Задача 2). Дискретно, в toast-а.
+      toast.success('Наемателят е добавен', {
+        label: 'Добави договор',
+        onPress: () => router.push(`/tenant/${data.id}`),
+      });
     } catch {
       toast.error('Неуспешно добавяне на наемателя');
     } finally {
