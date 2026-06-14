@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { View, Text, ScrollView, Share, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { useFocusEffect } from '@react-navigation/core';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
@@ -15,9 +15,10 @@ import { confirm } from '@/store/confirm';
 import { syncNow, withSyncPaused } from '@/services/sync-runtime';
 import { isSupabaseConfigured } from '@/services/supabase';
 import { schedulePaymentReminders, cancelScheduledReminders } from '@/services/notifications';
-import { exportDataAsJSON, exportDataAsCSV } from '@/services/export';
+import { shareDataExport } from '@/services/export';
 import { parseImportFile, applyImport } from '@/services/import';
 import { deleteAccount } from '@/services/account';
+import { reportError } from '@/services/sentry'; // [DEBUG] временно — да се премахне
 import { db } from '@/db/client';
 import { currentUserId } from '@/db/owner';
 import type { Currency } from '@/lib/domain';
@@ -64,13 +65,7 @@ export default function SettingsScreen() {
 
   async function handleExportJSON() {
     try {
-      const data = await exportDataAsJSON();
-      const json = JSON.stringify(data, null, 2);
-
-      await Share.share({
-        message: json,
-        title: 'RentTrack Data Export (JSON)',
-      });
+      await shareDataExport('json');
     } catch (error) {
       toast.error('Неуспешен експорт на JSON данните');
       console.error(error);
@@ -79,12 +74,7 @@ export default function SettingsScreen() {
 
   async function handleExportCSV() {
     try {
-      const csv = await exportDataAsCSV();
-
-      await Share.share({
-        message: csv,
-        title: 'RentTrack Data Export (CSV)',
-      });
+      await shareDataExport('csv');
     } catch (error) {
       toast.error('Неуспешен експорт на CSV данните');
       console.error(error);
@@ -292,6 +282,20 @@ export default function SettingsScreen() {
           </Text>
           <Button label="Изтриване на акаунт" variant="danger" onPress={() => setDeleteAccountVisible(true)} fullWidth />
         </Card>
+
+        {/* [DEBUG] временно — да се премахне. captureException вместо throw,
+            защото throw в onPress минава през RN error handler-а (redbox в dev)
+            без гаранция, че събитието тръгва към Sentry. */}
+        <Button
+          label="[DEBUG] Sentry тест"
+          variant="secondary"
+          onPress={() => {
+            reportError(new Error('sentry validation test'));
+            toast.success('Sentry тестово събитие изпратено');
+          }}
+          fullWidth
+          style={{ marginTop: spacing.lg }}
+        />
       </ScrollView>
 
       <DeleteAccountModal

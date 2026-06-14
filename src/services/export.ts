@@ -1,3 +1,5 @@
+import { File, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { db } from '@/db/client';
 import { properties, leases, tenants, payments } from '@/db/schema';
 import type { Property, Lease, Tenant, Payment } from '@/db/schema';
@@ -120,6 +122,39 @@ export function generateFileName(format: 'json' | 'csv'): string {
   const now = new Date();
   const dateStr = now.toISOString().split('T')[0];
   return `renttrack-export-${dateStr}.${format}`;
+}
+
+/** Записва съдържанието в реален файл в кеша и връща URI към него. */
+function writeExportFile(content: string, format: 'json' | 'csv'): string {
+  const file = new File(Paths.cache, generateFileName(format));
+  // overwrite: повторен експорт същия ден презаписва вчерашния-със-същото-име.
+  file.create({ overwrite: true });
+  file.write(content);
+  return file.uri;
+}
+
+/**
+ * Споделя експорта като реален ФАЙЛ, не като суров текст. Така share листът
+ * предлага „Запази във файл" / прикачване (а не лепи JSON-а като съобщение),
+ * и export→import кръгът работи: записаният .json се избира обратно от
+ * document picker-а в import-а. Структурата на данните не се променя — само
+ * начинът на споделяне.
+ */
+export async function shareDataExport(format: 'json' | 'csv'): Promise<void> {
+  const content =
+    format === 'json'
+      ? JSON.stringify(await exportDataAsJSON(), null, 2)
+      : await exportDataAsCSV();
+  const uri = writeExportFile(content, format);
+
+  if (!(await Sharing.isAvailableAsync())) {
+    throw new Error('Споделянето не е достъпно на това устройство.');
+  }
+  await Sharing.shareAsync(uri, {
+    mimeType: format === 'json' ? 'application/json' : 'text/csv',
+    UTI: format === 'json' ? 'public.json' : 'public.comma-separated-values-text',
+    dialogTitle: format === 'json' ? 'RentTrack експорт (JSON)' : 'RentTrack експорт (CSV)',
+  });
 }
 
 // Импортът/restore живее в services/import.ts (parseImportFile + applyImport):
