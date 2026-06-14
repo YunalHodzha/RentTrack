@@ -18,7 +18,6 @@ import { schedulePaymentReminders, cancelScheduledReminders } from '@/services/n
 import { shareDataExport } from '@/services/export';
 import { parseImportFile, applyImport } from '@/services/import';
 import { deleteAccount } from '@/services/account';
-import { reportError } from '@/services/sentry'; // [DEBUG] временно — да се премахне
 import { db } from '@/db/client';
 import { currentUserId } from '@/db/owner';
 import type { Currency } from '@/lib/domain';
@@ -283,19 +282,6 @@ export default function SettingsScreen() {
           <Button label="Изтриване на акаунт" variant="danger" onPress={() => setDeleteAccountVisible(true)} fullWidth />
         </Card>
 
-        {/* [DEBUG] временно — да се премахне. captureException вместо throw,
-            защото throw в onPress минава през RN error handler-а (redbox в dev)
-            без гаранция, че събитието тръгва към Sentry. */}
-        <Button
-          label="[DEBUG] Sentry тест"
-          variant="secondary"
-          onPress={() => {
-            reportError(new Error('sentry validation test'));
-            toast.success('Sentry тестово събитие изпратено');
-          }}
-          fullWidth
-          style={{ marginTop: spacing.lg }}
-        />
       </ScrollView>
 
       <DeleteAccountModal
