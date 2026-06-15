@@ -274,8 +274,9 @@ export function FAB({ onPress, icon = '+' }: { onPress: () => void; icon?: strin
         width: 58, height: 58, borderRadius: 29,
         backgroundColor: t.primary, alignItems: 'center', justifyContent: 'center',
         ...shadow.lg,
+        shadowColor: t.primary,
       }}>
-      <Text style={{ color: '#fff', fontSize: 30, lineHeight: 34, fontWeight: '300', marginTop: -2 }}>{icon}</Text>
+      <Text style={{ color: t.onPrimary, fontSize: 30, lineHeight: 34, fontWeight: '300', marginTop: -2 }}>{icon}</Text>
     </TouchableOpacity>
   );
 }
@@ -853,13 +854,16 @@ export function ToastHost() {
  * от toast-а това е същински RN `Modal` (transparent), за да се показва НАД
  * отворен `SheetModal` — приключване на договор например се пуска отвътре в sheet.
  * Цветовете/типографията/радиусите идват от темата (dark/light), а разрушителното
- * действие е във `danger` тон (червено), не в стандартното синьо.
+ * действие е във `danger` тон (червено), не в акцентното емералд зелено.
  * ------------------------------------------------------------------ */
 
 function ConfirmCard({ request, onResolve }: { request: ConfirmRequest; onResolve: (result: boolean) => void }) {
   const t = useTheme();
   const tone: Tone = request.tone === 'danger' ? 'danger' : 'primary';
   const accent = toneColors(t, tone).fg;
+  // White reads on the red danger button; on the emerald accent use onPrimary
+  // (dark text in dark mode) so the label stays legible on the bright accent.
+  const onAccent = tone === 'danger' ? '#fff' : t.onPrimary;
   return (
     <View
       style={{
@@ -894,7 +898,7 @@ function ConfirmCard({ request, onResolve }: { request: ConfirmRequest; onResolv
             shadowColor: accent,
             shadowOpacity: 0.3,
           }}>
-          <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{request.confirmLabel}</Text>
+          <Text style={{ color: onAccent, fontSize: 15, fontWeight: '700' }}>{request.confirmLabel}</Text>
         </TouchableOpacity>
       </View>
     </View>

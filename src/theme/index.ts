@@ -25,16 +25,20 @@ const light = {
   // inputs
   inputBg: '#F1F4F9',
   inputBorder: '#E2E8F0',
-  // brand
-  primary: '#2563EB',
-  primaryStrong: '#1D4ED8',
-  primarySoft: '#EAF1FE',
+  // brand accent — interactive (buttons, FAB, active tab, links, selected chips)
+  primary: '#065F46',
+  primaryStrong: '#054A37',
+  primarySoft: '#E3F2EC',
   onPrimary: '#FFFFFF',
   // Имотник identity accents (match app icon / splash)
   emerald: '#065F46',
   mint: '#5EEAD4',
-  // semantic
-  success: '#15A34A',
+  // brand surface — deep-emerald hero (income card); white text echoes the icon
+  brandSurface: '#065F46',
+  onBrandSurface: '#FFFFFF',
+  // semantic — success = paid/collected/positive money; kept distinct from the
+  // deep emerald accent so „this number is good" reads at a glance.
+  success: '#16A34A',
   successSoft: '#E6F6EC',
   warning: '#C2740B',
   warningSoft: '#FBEFD9',
@@ -58,13 +62,18 @@ const dark: typeof light = {
   borderStrong: '#2E3B57',
   inputBg: '#1B2436',
   inputBorder: '#2C3953',
-  primary: '#3B82F6',
-  primaryStrong: '#2563EB',
-  primarySoft: '#16244A',
-  onPrimary: '#FFFFFF',
+  // brand accent — brighter on dark so it pops; onPrimary is dark for contrast
+  primary: '#10B981',
+  primaryStrong: '#059669',
+  primarySoft: '#0E2A22',
+  onPrimary: '#052E22',
   // Имотник identity accents (match app icon / splash)
   emerald: '#065F46',
   mint: '#5EEAD4',
+  // brand surface — deep-emerald hero (income card); white text echoes the icon
+  brandSurface: '#065F46',
+  onBrandSurface: '#FFFFFF',
+  // success stays a yellow-green, visibly distinct from the emerald accent
   success: '#22C55E',
   successSoft: '#102A1C',
   warning: '#F59E0B',
@@ -134,7 +143,7 @@ export const shadow = {
     elevation: 5,
   },
   lg: {
-    shadowColor: '#1D4ED8',
+    shadowColor: '#065F46',
     shadowOpacity: 0.28,
     shadowRadius: 22,
     shadowOffset: { width: 0, height: 12 },

@@ -171,16 +171,16 @@ export default function DashboardScreen() {
         {/* Hero — expected monthly income */}
         <View
           style={{
-            backgroundColor: t.primary,
+            backgroundColor: t.brandSurface,
             borderRadius: radius.xl,
             padding: spacing.xxl,
             ...shadow.lg,
-            shadowColor: t.primary,
+            shadowColor: t.brandSurface,
           }}>
           <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: '700', letterSpacing: 0.4 }}>
             ОЧАКВАН МЕСЕЧЕН ДОХОД
           </Text>
-          <Text style={{ color: '#fff', fontSize: 34, fontWeight: '800', marginTop: 8, letterSpacing: -0.5 }}>
+          <Text style={{ color: t.onBrandSurface, fontSize: 34, fontWeight: '800', marginTop: 8, letterSpacing: -0.5 }}>
             {fmtMap(incomeBy)}
           </Text>
           <View
