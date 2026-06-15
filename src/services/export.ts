@@ -153,7 +153,7 @@ export async function shareDataExport(format: 'json' | 'csv'): Promise<void> {
   await Sharing.shareAsync(uri, {
     mimeType: format === 'json' ? 'application/json' : 'text/csv',
     UTI: format === 'json' ? 'public.json' : 'public.comma-separated-values-text',
-    dialogTitle: format === 'json' ? 'RentTrack експорт (JSON)' : 'RentTrack експорт (CSV)',
+    dialogTitle: format === 'json' ? 'Имотник експорт (JSON)' : 'Имотник експорт (CSV)',
   });
 }
 

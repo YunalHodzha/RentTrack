@@ -106,7 +106,7 @@ export default function SettingsScreen() {
       try {
         file = parseImportFile(json);
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Файлът не е валиден RentTrack експорт.');
+        toast.error(err instanceof Error ? err.message : 'Файлът не е валиден Имотник експорт.');
         return;
       }
 

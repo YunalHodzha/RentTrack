@@ -61,9 +61,9 @@ describe('parseImportFile', () => {
     expect(() => parseImportFile('{nope')).toThrow('Невалиден JSON файл.');
   });
 
-  it('rejects JSON that is not a RentTrack export', () => {
-    expect(() => parseImportFile('{"properties": []}')).toThrow('не е валиден RentTrack експорт');
-    expect(() => parseImportFile('[1,2,3]')).toThrow('не е валиден RentTrack експорт');
+  it('rejects JSON that is not an Имотник export', () => {
+    expect(() => parseImportFile('{"properties": []}')).toThrow('не е валиден Имотник експорт');
+    expect(() => parseImportFile('[1,2,3]')).toThrow('не е валиден Имотник експорт');
   });
 
   it('rejects unsupported versions', () => {

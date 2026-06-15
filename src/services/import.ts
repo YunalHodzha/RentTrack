@@ -44,7 +44,7 @@ export interface ImportResult {
 }
 
 /**
- * Валидира суров JSON низ като RentTrack експорт. Хвърля Error с готово за
+ * Валидира суров JSON низ като Имотник експорт. Хвърля Error с готово за
  * показване съобщение; не пише нищо — невалиден файл означава нула промени.
  * Файлове отпреди version полето (само с exportDate) се приемат.
  */
@@ -64,13 +64,13 @@ export function parseImportFile(json: string): ImportFile {
     !Array.isArray(data.leases) ||
     !Array.isArray(data.payments)
   ) {
-    throw new Error('Файлът не е валиден RentTrack експорт.');
+    throw new Error('Файлът не е валиден Имотник експорт.');
   }
   if (data.version !== undefined && data.version !== EXPORT_VERSION) {
     throw new Error(`Неподдържана версия на експорта (${String(data.version)}).`);
   }
   if (data.version === undefined && typeof data.exportDate !== 'string') {
-    throw new Error('Файлът не е валиден RentTrack експорт (липсва version / exportDate).');
+    throw new Error('Файлът не е валиден Имотник експорт (липсва version / exportDate).');
   }
   for (const rows of [data.properties, data.tenants, data.leases, data.payments] as unknown[][]) {
     for (const row of rows) {

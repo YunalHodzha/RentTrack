@@ -1,7 +1,7 @@
 import { useColorScheme } from 'react-native';
 
 /**
- * RentTrack design system.
+ * Имотник design system.
  *
  * A single source of truth for colors, spacing, radii and shadows so screens
  * stop hand-rolling `isDark ? ... : ...` ternaries everywhere. Consume colors

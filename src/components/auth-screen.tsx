@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, Text, KeyboardAvoidingView, Platform, ScrollView, Keyboard } from 'react-native';
+import { View, Text, Image, KeyboardAvoidingView, Platform, ScrollView, Keyboard } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen, Card, Field, Input, Button, useTheme, spacing } from '@/components/ui';
 import { useAuthStore } from '@/store/auth';
@@ -97,8 +97,12 @@ export function AuthScreen() {
           showsVerticalScrollIndicator={false}>
 
           <View style={{ alignItems: 'center', marginBottom: spacing.xxl }}>
-            <Text style={{ fontSize: 34 }}>🏠</Text>
-            <Text style={{ fontSize: 26, fontWeight: '800', color: t.text, marginTop: spacing.sm }}>RentTrack</Text>
+            <Image
+              source={require('@/assets/images/logo-mark-emerald.png')}
+              style={{ width: 68, height: 68 }}
+              resizeMode="contain"
+            />
+            <Text style={{ fontSize: 26, fontWeight: '800', color: t.text, marginTop: spacing.sm }}>Имотник</Text>
             <Text style={{ fontSize: 14, color: t.textSecondary, marginTop: 4 }}>
               {isReset ? 'Възстановяване на парола' : isSignup ? 'Създайте акаунт' : 'Влезте в акаунта си'}
             </Text>

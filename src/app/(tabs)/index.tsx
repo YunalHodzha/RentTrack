@@ -252,7 +252,7 @@ export default function DashboardScreen() {
           <View style={{ marginTop: spacing.xxl }}>
             <EmptyState
               icon="🏠"
-              title="Добре дошли в RentTrack"
+              title="Добре дошли в Имотник"
               message="Започнете, като добавите първия си имот в раздел „Имоти“."
               action={<Button label="Добави имот" onPress={() => router.push('/(tabs)/properties')} />}
             />
