@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { View, Text, Image, KeyboardAvoidingView, Platform, ScrollView, Keyboard } from 'react-native';
+import { View, Text, KeyboardAvoidingView, Platform, ScrollView, Keyboard } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen, Card, Field, Input, Button, useTheme, spacing } from '@/components/ui';
+import { BrandLogo } from '@/components/brand-logo';
 import { useAuthStore } from '@/store/auth';
 import { toast } from '@/store/toast';
 import { isSupabaseConfigured } from '@/services/supabase';
@@ -97,11 +98,7 @@ export function AuthScreen() {
           showsVerticalScrollIndicator={false}>
 
           <View style={{ alignItems: 'center', marginBottom: spacing.xxl }}>
-            <Image
-              source={require('@/assets/images/logo-mark-emerald.png')}
-              style={{ width: 68, height: 68 }}
-              resizeMode="contain"
-            />
+            <BrandLogo size={68} color={t.isDark ? t.mint : t.emerald} />
             <Text style={{ fontSize: 26, fontWeight: '800', color: t.text, marginTop: spacing.sm }}>Имотник</Text>
             <Text style={{ fontSize: 14, color: t.textSecondary, marginTop: 4 }}>
               {isReset ? 'Възстановяване на парола' : isSignup ? 'Създайте акаунт' : 'Влезте в акаунта си'}
