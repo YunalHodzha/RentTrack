@@ -30,6 +30,9 @@ const light = {
   primaryStrong: '#1D4ED8',
   primarySoft: '#EAF1FE',
   onPrimary: '#FFFFFF',
+  // Имотник identity accents (match app icon / splash)
+  emerald: '#065F46',
+  mint: '#5EEAD4',
   // semantic
   success: '#15A34A',
   successSoft: '#E6F6EC',
@@ -59,6 +62,9 @@ const dark: typeof light = {
   primaryStrong: '#2563EB',
   primarySoft: '#16244A',
   onPrimary: '#FFFFFF',
+  // Имотник identity accents (match app icon / splash)
+  emerald: '#065F46',
+  mint: '#5EEAD4',
   success: '#22C55E',
   successSoft: '#102A1C',
   warning: '#F59E0B',
