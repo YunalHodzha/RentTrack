@@ -8,6 +8,7 @@
     "scheme": "renttrack",
     "userInterfaceStyle": "automatic",
     "ios": {
+      "bundleIdentifier": "com.imotnik",
       "infoPlist": {
         "UIBackgroundModes": [
           "remote-notification"
@@ -21,7 +22,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "softwareKeyboardLayoutMode": "resize",
-      "package": "com.anonymous.renttrack"
+      "package": "com.imotnik"
     },
     "web": {
       "output": "single",
@@ -43,6 +44,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "e080293f-d77f-424b-9e7d-5be58e00fad1"
+      }
+    },
+    "owner": "yunal.hodzha"
   }
 }

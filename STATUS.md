@@ -1,6 +1,6 @@
 # RentTrack — Статус на проекта
 
-> Последна актуализация: 2026-06-14
+> Последна актуализация: 2026-06-16
 
 ---
 
@@ -214,17 +214,21 @@
 - [x] **Махнат „[DEBUG] Sentry тест" бутон** — `enabled: !__DEV__` възстановен; [DEBUG] логовете за насрочените известия в `_layout.tsx`/`auth.ts` остават за ръчния Тест 8
 - Проверки: `tsc --noEmit` чисто; `jest` — 88 теста (8 suite-а) минават
 
-### Phase 5A — Правно и идентичност
-- [ ] Финално име на приложението + проверка за наличност в App Store / Google Play (RentTrack вероятно е заето)
-- [ ] Икона 1024×1024, splash screen
-- [ ] Декларация за поверителност + условия за ползване на публичен URL (GitHub Pages)
-- [ ] GDPR: изтриване на данни при изтриване на акаунт, минимизация; App Privacy въпросник на Apple
+### Phase 5A — Правно и идентичност — завършена ✅
+- [x] **Финално име: „Имотник"** — проверено за наличност (Google Play / App Store, домейн, EUIPO + bpo.bg марки — чисто); RentTrack отхвърлено
+- [x] **Икона 1024×1024 + splash screen** — дълбоко зелено `#065F46` + ментов монограм; adaptive icon + splash; вътрешно лого `BrandLogo` (theming-aware, векторно)
+- [x] **UI акцент уеднаквен с бранд емералд** — `accent`/`brandSurface` (син → емералд); „success" отделен в собствен токен
+- [x] **Декларация за поверителност + условия за ползване** — хостнати на `imotnik.app/privacy` и `imotnik.app/terms` (Cloudflare Pages), BG + EN
+- [x] **Домейн `imotnik.app` + имейл `hello@imotnik.app`** — Cloudflare Email Routing → Gmail
+- [x] **GDPR** — изтриване на данни при изтриване на акаунт (Phase 4.6) + публична декларация за поверителност; App Privacy въпросникът на Apple се попълва при подаване (5C)
 
 ### Phase 5B — Билд инфраструктура
-- [ ] `app.json`: `ios.bundleIdentifier`, `android.package`, `versionCode` / `buildNumber`
-- [ ] `eas.json` с профили development / preview / production
+- [x] **`app.json` bundle ID** — `android.package` + `ios.bundleIdentifier` = `com.imotnik`
+- [x] **`eas.json`** — профили development / preview / production; `cli.appVersionSource: remote`
+- [ ] `eas init` (свързване с EAS проекта / `projectId`)
 - [ ] Google Play Developer акаунт ($25 еднократно), Apple Developer Program ($99/год.)
 - [ ] Първи EAS production билд + инсталация на реално устройство
+> Бележка: `scheme` „renttrack" остава засега — смяната е отделна Supabase задача (deep links / redirect URLs за reset-password).
 
 ### Phase 5C — Мек старт и публикуване
 - [ ] TestFlight (iOS) + Internal testing track (Android) с 5–10 тестери
