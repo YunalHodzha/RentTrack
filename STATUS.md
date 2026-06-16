@@ -225,7 +225,7 @@
 ### Phase 5B — Билд инфраструктура
 - [x] **`app.json` bundle ID** — `android.package` + `ios.bundleIdentifier` = `com.imotnik`
 - [x] **`eas.json`** — профили development / preview / production; `cli.appVersionSource: remote`
-- [ ] `eas init` (свързване с EAS проекта / `projectId`)
+- [x] `eas init` (свързване с EAS проекта / `projectId`)
 - [ ] Google Play Developer акаунт ($25 еднократно), Apple Developer Program ($99/год.)
 - [ ] Първи EAS production билд + инсталация на реално устройство
 > Бележка: `scheme` „renttrack" остава засега — смяната е отделна Supabase задача (deep links / redirect URLs за reset-password).
