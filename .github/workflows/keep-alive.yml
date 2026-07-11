@@ -7,6 +7,15 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
+      - name: Debug — проверка на секретите (без разкриване на стойности)
+        run: |
+          echo "URL дължина: ${#SUPABASE_URL}"
+          echo "KEY дължина: ${#SUPABASE_SERVICE_ROLE_KEY}"
+          echo "URL начало: ${SUPABASE_URL:0:24}"
+          echo "KEY начало: ${SUPABASE_SERVICE_ROLE_KEY:0:6}"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       - name: Вкарай keep-alive ред
         run: |
           curl -sS -X POST "${{ secrets.SUPABASE_URL }}/rest/v1/keep_alive" \
