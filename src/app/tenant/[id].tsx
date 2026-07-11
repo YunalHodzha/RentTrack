@@ -1,7 +1,6 @@
 import { useCallback, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Linking } from 'react-native';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/core';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { tenants, leases, properties, payments } from '@/db/schema';
@@ -12,6 +11,7 @@ import { toast } from '@/store/toast';
 import { confirm } from '@/store/confirm';
 import { createActiveLease, type NewLeaseInput } from '@/services/leases';
 import { LeaseFormModal } from '@/components/lease-form';
+import { useFocusReload } from '@/hooks/use-focus-reload';
 import {
   Screen, Card, Badge, Avatar, SectionTitle, Button, Field, Input,
   InfoRow, Divider, EmptyState, Loading, ErrorState, SheetModal, useTheme, spacing, radius,
@@ -77,7 +77,9 @@ export default function TenantDetailScreen() {
     }
   }, [id]);
 
-  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
+  // Презарежда при фокус и при завършен sync (следи version), за да се вижда
+  // новото веднага, а не чак при следваща смяна на фокус.
+  useFocusReload(loadData);
 
   async function handleEdit(data: { name: string; phone: string | null; email: string | null; notes: string | null }) {
     if (!tenant) return;

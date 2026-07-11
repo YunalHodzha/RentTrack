@@ -1,7 +1,6 @@
 import { useCallback, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/core';
 import { eq } from 'drizzle-orm';
 import { format } from 'date-fns';
 import { db } from '@/db/client';
@@ -17,6 +16,7 @@ import { createActiveLease, type NewLeaseInput } from '@/services/leases';
 import { savePayments, type PaymentInput } from '@/services/payments';
 import { LeaseFormModal } from '@/components/lease-form';
 import { PaymentModal, type PaymentModalState } from '@/components/payment-form';
+import { useFocusReload } from '@/hooks/use-focus-reload';
 import {
   Screen, Card, Badge, IconBadge, SectionTitle, Button, Field, Input, ChipGroup,
   InfoRow, Divider, EmptyState, Loading, ErrorState, SheetModal,
@@ -78,7 +78,9 @@ export default function PropertyDetailScreen() {
     }
   }, [id]);
 
-  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
+  // Презарежда при фокус и при завършен sync (следи version), за да се вижда
+  // новото веднага, а не чак при следваща смяна на фокус.
+  useFocusReload(loadData);
 
   const currency: Currency = (activeLease?.currency as Currency) ?? 'EUR';
 
