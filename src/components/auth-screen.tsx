@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { View, Text, KeyboardAvoidingView, Platform, ScrollView, Keyboard } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Screen, Card, Field, Input, Button, useTheme, spacing } from '@/components/ui';
+import { Screen, Card, Field, Input, PasswordInput, Button, useTheme, spacing } from '@/components/ui';
 import { BrandLogo } from '@/components/brand-logo';
 import { useAuthStore } from '@/store/auth';
 import { toast } from '@/store/toast';
@@ -123,11 +123,10 @@ export function AuthScreen() {
               </Text>
             ) : (
               <Field label="Парола" hint={isSignup ? 'Поне 6 символа' : undefined}>
-                <Input
+                <PasswordInput
                   value={password}
                   onChangeText={setPassword}
                   placeholder="••••••••"
-                  secureTextEntry
                   autoCapitalize="none"
                   textContentType={isSignup ? 'newPassword' : 'password'}
                 />

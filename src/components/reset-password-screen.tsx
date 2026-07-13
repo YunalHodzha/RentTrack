@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { View, Text, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Screen, Card, Field, Input, Button, Loading, useTheme, spacing } from '@/components/ui';
+import { Screen, Card, Field, PasswordInput, Button, Loading, useTheme, spacing } from '@/components/ui';
 import { toast } from '@/store/toast';
 import { supabase } from '@/services/supabase';
 
@@ -122,22 +122,20 @@ export function ResetPasswordScreen({ url, onDone }: { url: string | null; onDon
 
           <Card>
             <Field label="Нова парола" hint="Поне 6 символа" error={errors.password}>
-              <Input
+              <PasswordInput
                 value={password}
                 onChangeText={(v) => { setPassword(v); setErrors((e) => ({ ...e, password: undefined })); }}
                 placeholder="••••••••"
-                secureTextEntry
                 autoCapitalize="none"
                 textContentType="newPassword"
                 error={!!errors.password}
               />
             </Field>
             <Field label="Повторете паролата" error={errors.confirm}>
-              <Input
+              <PasswordInput
                 value={confirmPassword}
                 onChangeText={(v) => { setConfirmPassword(v); setErrors((e) => ({ ...e, confirm: undefined })); }}
                 placeholder="••••••••"
-                secureTextEntry
                 autoCapitalize="none"
                 textContentType="newPassword"
                 error={!!errors.confirm}

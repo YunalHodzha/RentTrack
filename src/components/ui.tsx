@@ -326,6 +326,27 @@ export function Input(props: TextInputProps & { multiline?: boolean; error?: boo
   );
 }
 
+/** Поле за парола със текстов бутон „Покажи/Скрий" (проектът няма иконна библиотека). */
+export function PasswordInput(props: TextInputProps & { error?: boolean }) {
+  const t = useTheme();
+  const [visible, setVisible] = useState(false);
+  return (
+    <View style={{ position: 'relative' }}>
+      <Input {...props} secureTextEntry={!visible} style={{ paddingRight: 76 }} />
+      <Pressable
+        onPress={() => setVisible((v) => !v)}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel={visible ? 'Скрий паролата' : 'Покажи паролата'}
+        style={{ position: 'absolute', right: 12, top: 0, bottom: 0, justifyContent: 'center' }}>
+        <Text style={{ fontSize: 13, fontWeight: '700', color: t.primary }}>
+          {visible ? 'Скрий' : 'Покажи'}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
 export type ChipOption<T extends string | number> = { value: T; label: string };
 
 /** Horizontal-wrapping single-select pill group. */
