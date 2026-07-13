@@ -1,4 +1,5 @@
 import { useColorScheme } from 'react-native';
+import { useSettingsStore } from '@/store/settings';
 
 /**
  * Имотник design system.
@@ -90,7 +91,9 @@ export type ThemeColors = typeof light;
 export type Theme = ThemeColors & { isDark: boolean; scheme: Scheme };
 
 export function useTheme(): Theme {
-  const scheme: Scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
+  const mode = useSettingsStore((s) => s.themeMode);
+  const system: Scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
+  const scheme: Scheme = mode === 'system' ? system : mode;
   const colors = scheme === 'dark' ? dark : light;
   return { ...colors, isDark: scheme === 'dark', scheme };
 }

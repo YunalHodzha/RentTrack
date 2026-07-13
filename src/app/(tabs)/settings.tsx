@@ -27,9 +27,15 @@ const CURRENCIES = [
   { value: 'BGN' as const, label: 'BGN лв.' },
 ];
 
+const THEME_MODES = [
+  { value: 'system' as const, label: 'Система' },
+  { value: 'light' as const, label: 'Светла' },
+  { value: 'dark' as const, label: 'Тъмна' },
+];
+
 export default function SettingsScreen() {
   const t = useTheme();
-  const { defaultCurrency, notificationDaysBefore, updateDefaultCurrency, updateNotificationDaysBefore } = useSettingsStore();
+  const { defaultCurrency, notificationDaysBefore, themeMode, updateDefaultCurrency, updateNotificationDaysBefore, updateThemeMode } = useSettingsStore();
   const { user, signOut } = useAuthStore();
   const { status: syncStatus, lastSyncedAt, error: syncError } = useSyncStore();
   const [localCurrency, setLocalCurrency] = useState<Currency>(defaultCurrency);
@@ -180,42 +186,20 @@ export default function SettingsScreen() {
           <Button label="Изход" variant="danger" onPress={handleSignOut} fullWidth />
         </Card>
 
-        <SectionTitle>Синхронизация</SectionTitle>
-        <Card style={{ marginBottom: spacing.lg }}>
-          {isSupabaseConfigured ? (
-            <>
-              <Text style={{ fontSize: 13, color: t.textSecondary }}>
-                {syncStatus === 'syncing'
-                  ? 'Синхронизиране…'
-                  : syncStatus === 'error'
-                    ? `Грешка: ${syncError ?? 'неуспешна синхронизация'}`
-                    : lastSyncedAt
-                      ? `Последна синхронизация: ${new Date(lastSyncedAt).toLocaleString('bg-BG')}`
-                      : 'Все още няма синхронизация'}
-              </Text>
-              <Button
-                label={syncStatus === 'syncing' ? 'Синхронизиране…' : 'Синхронизирай сега'}
-                variant="secondary"
-                onPress={() => { syncNow({ notifySuccess: true, notifyError: true }); }}
-                disabled={syncStatus === 'syncing'}
-                fullWidth
-                style={{ marginTop: spacing.md }}
-              />
-            </>
-          ) : (
-            <Text style={{ fontSize: 13, color: t.textSecondary, lineHeight: 19 }}>
-              Облачната синхронизация не е конфигурирана. Данните се пазят само на това устройство.
-              За включване задайте Supabase ключовете в .env (виж .env.example).
-            </Text>
-          )}
-        </Card>
-
         <SectionTitle>Валута</SectionTitle>
         <Card style={{ marginBottom: spacing.lg }}>
           <Text style={{ fontSize: 13, color: t.textSecondary, marginBottom: spacing.md }}>
             Предпочитана валута по подразбиране
           </Text>
           <ChipGroup options={CURRENCIES} value={localCurrency} onChange={setLocalCurrency} />
+        </Card>
+
+        <SectionTitle>Тема</SectionTitle>
+        <Card style={{ marginBottom: spacing.lg }}>
+          <Text style={{ fontSize: 13, color: t.textSecondary, marginBottom: spacing.md }}>
+            Изглед на приложението
+          </Text>
+          <ChipGroup options={THEME_MODES} value={themeMode} onChange={(m) => updateThemeMode(m)} />
         </Card>
 
         <SectionTitle>Известия</SectionTitle>
@@ -241,31 +225,65 @@ export default function SettingsScreen() {
           style={{ marginTop: spacing.xxl }}
         />
 
-        <SectionTitle style={{ marginTop: spacing.xxl }}>Експорт на данни</SectionTitle>
-        <Card style={{ marginBottom: spacing.lg }}>
-          <Text style={{ fontSize: 13, color: t.textMuted, marginBottom: spacing.lg }}>
-            Експортирайте всички данни в JSON или CSV формат за архив или анализ.
-          </Text>
-          <View style={{ gap: spacing.md }}>
-            <Button label="Експорт като JSON" variant="secondary" onPress={handleExportJSON} fullWidth />
-            <Button label="Експорт като CSV" variant="secondary" onPress={handleExportCSV} fullWidth />
-          </View>
-        </Card>
-
-        {/* Аварийните/рядко ползваните функции стоят свити, за да не седят
-            наравно с ежедневните настройки. Логиката на импорта не е пипана. */}
-        <SectionTitle>Разширени</SectionTitle>
+        {/* Синхронизация, експорт и възстановяване стоят свити, за да не седят
+            наравно с ежедневните настройки. Логиката им не е пипана. */}
+        <SectionTitle style={{ marginTop: spacing.xxl }}>Разширени</SectionTitle>
         <Card style={{ marginBottom: spacing.lg }}>
           <TouchableOpacity
             onPress={() => setAdvancedOpen((v) => !v)}
             accessibilityRole="button"
             accessibilityLabel={advancedOpen ? 'Скрий разширените настройки' : 'Покажи разширените настройки'}
             style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text style={{ fontSize: 14, fontWeight: '700', color: t.text }}>Възстановяване от архив</Text>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: t.text }}>Разширени настройки</Text>
             <Text style={{ fontSize: 14, fontWeight: '800', color: t.textMuted }}>{advancedOpen ? '▾' : '▸'}</Text>
           </TouchableOpacity>
           {advancedOpen ? (
             <View style={{ marginTop: spacing.lg }}>
+              {/* Синхронизация */}
+              <Text style={{ fontSize: 14, fontWeight: '700', color: t.text, marginBottom: spacing.md }}>Синхронизация</Text>
+              {isSupabaseConfigured ? (
+                <>
+                  <Text style={{ fontSize: 13, color: t.textSecondary }}>
+                    {syncStatus === 'syncing'
+                      ? 'Синхронизиране…'
+                      : syncStatus === 'error'
+                        ? `Грешка: ${syncError ?? 'неуспешна синхронизация'}`
+                        : lastSyncedAt
+                          ? `Последна синхронизация: ${new Date(lastSyncedAt).toLocaleString('bg-BG')}`
+                          : 'Все още няма синхронизация'}
+                  </Text>
+                  <Button
+                    label={syncStatus === 'syncing' ? 'Синхронизиране…' : 'Синхронизирай сега'}
+                    variant="secondary"
+                    onPress={() => { syncNow({ notifySuccess: true, notifyError: true }); }}
+                    disabled={syncStatus === 'syncing'}
+                    fullWidth
+                    style={{ marginTop: spacing.md }}
+                  />
+                </>
+              ) : (
+                <Text style={{ fontSize: 13, color: t.textSecondary, lineHeight: 19 }}>
+                  Облачната синхронизация не е конфигурирана. Данните се пазят само на това устройство.
+                  За включване задайте Supabase ключовете в .env (виж .env.example).
+                </Text>
+              )}
+
+              <Divider />
+
+              {/* Експорт на данни */}
+              <Text style={{ fontSize: 14, fontWeight: '700', color: t.text, marginBottom: spacing.md }}>Експорт на данни</Text>
+              <Text style={{ fontSize: 13, color: t.textMuted, marginBottom: spacing.lg }}>
+                Експортирайте всички данни в JSON или CSV формат за архив или анализ.
+              </Text>
+              <View style={{ gap: spacing.md }}>
+                <Button label="Експорт като JSON" variant="secondary" onPress={handleExportJSON} fullWidth />
+                <Button label="Експорт като CSV" variant="secondary" onPress={handleExportCSV} fullWidth />
+              </View>
+
+              <Divider />
+
+              {/* Възстановяване от архив */}
+              <Text style={{ fontSize: 14, fontWeight: '700', color: t.text, marginBottom: spacing.md }}>Възстановяване от архив</Text>
               <Button label="Внеси от JSON" variant="secondary" onPress={handleImportJSON} fullWidth />
               <Text style={{ fontSize: 12, color: t.textMuted, marginTop: spacing.md, lineHeight: 17 }}>
                 Замества всички данни с тези от файла. Ползва се за възстановяване от архив.

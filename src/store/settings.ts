@@ -4,17 +4,20 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export interface AppSettings {
   defaultCurrency: 'EUR' | 'BGN';
   notificationDaysBefore: number;
+  themeMode: 'system' | 'light' | 'dark';
 }
 
 const defaultSettings: AppSettings = {
   defaultCurrency: 'EUR',
   notificationDaysBefore: 3,
+  themeMode: 'system',
 };
 
 interface SettingsStore extends AppSettings {
   loadSettings: () => Promise<void>;
   updateDefaultCurrency: (currency: 'EUR' | 'BGN') => Promise<void>;
   updateNotificationDaysBefore: (days: number) => Promise<void>;
+  updateThemeMode: (mode: 'system' | 'light' | 'dark') => Promise<void>;
 }
 
 export const useSettingsStore = create<SettingsStore>((set) => ({
@@ -24,8 +27,8 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
     try {
       const stored = await AsyncStorage.getItem('renttrack_settings');
       if (stored) {
-        const settings = JSON.parse(stored) as AppSettings;
-        set(settings);
+        const settings = JSON.parse(stored) as Partial<AppSettings>;
+        set({ ...defaultSettings, ...settings });
       } else {
         set(defaultSettings);
       }
@@ -52,6 +55,17 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
       const stored = await AsyncStorage.getItem('renttrack_settings');
       const settings = stored ? JSON.parse(stored) : defaultSettings;
       await AsyncStorage.setItem('renttrack_settings', JSON.stringify({ ...settings, notificationDaysBefore: clamped }));
+    } catch (error) {
+      console.error('Failed to save settings:', error);
+    }
+  },
+
+  updateThemeMode: async (mode) => {
+    set({ themeMode: mode });
+    try {
+      const stored = await AsyncStorage.getItem('renttrack_settings');
+      const settings = stored ? JSON.parse(stored) : defaultSettings;
+      await AsyncStorage.setItem('renttrack_settings', JSON.stringify({ ...settings, themeMode: mode }));
     } catch (error) {
       console.error('Failed to save settings:', error);
     }
