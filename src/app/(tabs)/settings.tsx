@@ -18,6 +18,7 @@ import { schedulePaymentReminders, cancelScheduledReminders } from '@/services/n
 import { shareDataExport } from '@/services/export';
 import { parseImportFile, applyImport } from '@/services/import';
 import { deleteAccount } from '@/services/account';
+import { ChangePasswordSheet } from '@/components/change-password-sheet';
 import { db } from '@/db/client';
 import { currentUserId } from '@/db/owner';
 import type { Currency } from '@/lib/domain';
@@ -42,6 +43,7 @@ export default function SettingsScreen() {
   const [localDaysBefore, setLocalDaysBefore] = useState(String(notificationDaysBefore));
   const [deleteAccountVisible, setDeleteAccountVisible] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [changePasswordVisible, setChangePasswordVisible] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   useFocusEffect(
@@ -183,6 +185,13 @@ export default function SettingsScreen() {
               <Text style={{ fontSize: 15, fontWeight: '700', color: t.text, marginBottom: spacing.lg }}>{user.email}</Text>
             </>
           ) : null}
+          <Button
+            label="Смяна на парола"
+            variant="secondary"
+            onPress={() => setChangePasswordVisible(true)}
+            fullWidth
+            style={{ marginBottom: spacing.md }}
+          />
           <Button label="Изход" variant="danger" onPress={handleSignOut} fullWidth />
         </Card>
 
@@ -301,6 +310,11 @@ export default function SettingsScreen() {
         </Card>
 
       </ScrollView>
+
+      <ChangePasswordSheet
+        visible={changePasswordVisible}
+        onClose={() => setChangePasswordVisible(false)}
+      />
 
       <DeleteAccountModal
         visible={deleteAccountVisible}
