@@ -9,9 +9,10 @@ import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { router } from 'expo-router';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { leases, payments } from '@/db/schema';
+import { leases, payments, properties } from '@/db/schema';
 import { ownedAndLive, currentUserId } from '@/db/owner';
-import { formatPeriod, addPeriodMonths, formatMoney, paymentDueDate, type Currency } from '@/lib/domain';
+import { type Currency } from '@/lib/domain';
+import { buildDailyDigest } from '@/lib/notification-digest';
 import { useSettingsStore } from '@/store/settings';
 
 // Notifications were removed from Expo Go in SDK 53. When running in Expo Go we
@@ -86,11 +87,16 @@ export async function cancelScheduledReminders() {
 }
 
 /**
- * Schedule payment reminders for upcoming payment dues.
+ * Насрочва по ЕДИН дневен дайджест (в 09:00 локално време) вместо по едно
+ * известие на договор. Съдържанието идва от чистата `buildDailyDigest`
+ * (наближаващи падежи, падеж днес, просрочия на всеки 3 дни).
  *
  * IMPORTANT LIMITATIONS:
- * - Notifications are scheduled up to 3 months in advance only. If the app is not
- *   opened for more than 3 months, reminders will not be triggered.
+ * - Хоризонтът е 30 дни напред; преплануира се при всяко отваряне на
+ *   приложението и при всяка промяна на плащане, така че на практика
+ *   известията спират само ако приложението не се отваря над месец.
+ * - iOS лимитът от 64 насрочени известия е спазен по конструкция (≤31 дни ×
+ *   1 известие на ден).
  * - For reliable testing on physical devices, use a development build via EAS
  *   (not Expo Go). Expo Go has limited notification support from SDK 53+.
  * - On iOS, the app must have notification permissions granted. On Android 12+,
@@ -105,44 +111,63 @@ export async function schedulePaymentReminders() {
   const uid = currentUserId();
   if (!uid) return;
 
-  const notificationDaysBefore = useSettingsStore.getState().notificationDaysBefore;
-  const activeLeases = await db.select().from(leases)
+  const daysBefore = useSettingsStore.getState().notificationDaysBefore;
+
+  const activeLeases = await db
+    .select({
+      id: leases.id,
+      propertyId: leases.propertyId,
+      propertyName: properties.name,
+      rentAmount: leases.rentAmount,
+      currency: leases.currency,
+      paymentDay: leases.paymentDay,
+      startDate: leases.startDate,
+    })
+    .from(leases)
+    .innerJoin(properties, eq(leases.propertyId, properties.id))
     .where(ownedAndLive(leases, uid, eq(leases.status, 'active')));
-  const today = new Date();
-  const currentPeriod = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
 
-  for (const lease of activeLeases) {
-    for (let i = 0; i < 3; i++) {
-      const period = addPeriodMonths(currentPeriod, i);
-      const [existingPayment] = await db
-        .select()
-        .from(payments)
-        .where(ownedAndLive(payments, uid, eq(payments.leaseId, lease.id), eq(payments.period, period)))
-        .limit(1);
+  const paidRows = await db
+    .select({ leaseId: payments.leaseId, period: payments.period })
+    .from(payments)
+    .where(ownedAndLive(payments, uid, eq(payments.status, 'paid')));
 
-      if (existingPayment?.status === 'paid') continue;
+  const digestLeases = activeLeases.map((l) => ({
+    id: l.id,
+    propertyId: l.propertyId,
+    propertyName: l.propertyName,
+    rentAmount: l.rentAmount,
+    currency: (l.currency as Currency) ?? 'EUR',
+    paymentDay: l.paymentDay,
+    startPeriod: l.startDate.slice(0, 7),
+  }));
+  const paidPeriods = new Set(paidRows.map((p) => `${p.leaseId}:${p.period}`));
 
-      // Денят се ограничава до дължината на месеца (paymentDay=31 във февруари →
-      // 28-и/29-и), за да не се „търкаля" падежът към следващия месец.
-      const dueDate = paymentDueDate(period, lease.paymentDay);
-      if (!dueDate) continue;
-      const reminderDate = new Date(dueDate);
-      reminderDate.setDate(reminderDate.getDate() - notificationDaysBefore);
+  const now = new Date();
+  // Днешният дайджест влиза само ако 09:00 локално още не е минало.
+  const firstOffset = now.getHours() < 9 ? 0 : 1;
 
-      if (reminderDate > today) {
-        const currency = (lease.currency as Currency) ?? 'EUR';
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title: 'Напомяне за плащане',
-            body: `${formatMoney(lease.rentAmount, currency)} е дължимо на ${formatPeriod(period)}`,
-            data: { propertyId: lease.propertyId },
-          },
-          trigger: {
-            type: Notifications.SchedulableTriggerInputTypes.DATE,
-            date: reminderDate,
-          },
-        });
-      }
-    }
+  for (let offset = firstOffset; offset <= 30; offset++) {
+    // Локални компоненти, НЕ new Date('YYYY-MM-DD') — ISO стрингът се парсва
+    // като полунощ UTC и в източните зони известието бие в 2–3 през нощта.
+    const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
+    const date = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+
+    const digest = buildDailyDigest({ date, daysBefore, leases: digestLeases, paidPeriods });
+    if (!digest) continue;
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: digest.title,
+        body: digest.body,
+        // propertyId само при дайджест за един имот — deep link-ът в
+        // setupNotificationListeners навигира натам.
+        ...(digest.propertyId ? { data: { propertyId: digest.propertyId } } : {}),
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: new Date(day.getFullYear(), day.getMonth(), day.getDate(), 9, 0, 0),
+      },
+    });
   }
 }
