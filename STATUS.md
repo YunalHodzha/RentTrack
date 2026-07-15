@@ -194,7 +194,7 @@
 
 **Ръчна валидация преди Фаза 5A** (насъбрано от сесии 2–4; реално устройство с development build):
 - [ ] Изпълни `supabase/account-deletion.sql` в Supabase SQL Editor
-- [ ] Добави Redirect URLs в Supabase (Authentication → URL Configuration): `renttrack://reset-password` + Expo Go варианта `exp://<IP>:8081/--/reset-password`
+- [ ] Добави Redirect URLs в Supabase (Authentication → URL Configuration): `imotnik://reset-password` + Expo Go варианта `exp://<IP>:8081/--/reset-password`
 - [ ] Password reset поток: заявка → имейл линк → нова парола → вход; и изтекъл/повторен линк → „Невалиден линк"
 - [ ] Изтриване на акаунт: тестов акаунт с данни → ИЗТРИЙ → проверка в Dashboard (auth.users и данните ги няма), вход невъзможен, нова регистрация стартира празна
 - [ ] Известия: насрочени → изход → изчезнали; вход → възстановени; същото при изтриване на акаунт
@@ -238,7 +238,7 @@
 - [x] `eas init` (свързване с EAS проекта / `projectId`)
 - [ ] Google Play Developer акаунт ($25 еднократно), Apple Developer Program ($99/год.)
 - [ ] Първи EAS production билд + инсталация на реално устройство
-> Бележка: `scheme` „renttrack" остава засега — смяната е отделна Supabase задача (deep links / redirect URLs за reset-password).
+> Бележка: `scheme` вече е `imotnik` (сменена на 2026-07-15) — deep link-ът е `imotnik://reset-password`; Redirect URL-ите в Supabase да се добавят с новата схема.
 
 ### Phase 5C — Мек старт и публикуване
 - [ ] TestFlight (iOS) + Internal testing track (Android) с 5–10 тестери

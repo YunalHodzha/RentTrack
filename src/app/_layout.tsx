@@ -73,7 +73,7 @@ function RootLayout() {
 
   const ready = dbReady && !authInitializing;
 
-  // Password recovery deep link (renttrack://reset-password#... / exp://.../--/reset-password#...).
+  // Password recovery deep link (imotnik://reset-password#... / exp://.../--/reset-password#...).
   // Прихваща се тук, а не като route: без сесия Stack-ът изобщо не е монтиран,
   // а екранът трябва да е достъпен без вход. Флагът държи екрана видим, докато
   // потребителят запази паролата — setSession от линка създава сесия по средата
