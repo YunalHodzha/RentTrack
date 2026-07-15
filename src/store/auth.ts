@@ -13,11 +13,19 @@ interface AuthStore {
 
   /** Restore any persisted session and subscribe to auth changes. Call once on startup. */
   init: () => Promise<void>;
-  signUp: (email: string, password: string) => Promise<{ error: string | null }>;
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  /**
+   * awaitingConfirmation = true при включен „Confirm email" в Supabase:
+   * акаунтът е създаден, но без сесия — потребителят трябва да отвори
+   * линка за потвърждение от имейла си.
+   */
+  signUp: (email: string, password: string) => Promise<{ error: string | null; awaitingConfirmation: boolean }>;
+  /** emailNotConfirmed = true при опит за вход с още непотвърден имейл. */
+  signIn: (email: string, password: string) => Promise<{ error: string | null; emailNotConfirmed: boolean }>;
   signOut: () => Promise<void>;
   /** Изпраща имейл с линк за нова парола, водещ обратно в приложението. */
   requestPasswordReset: (email: string) => Promise<{ error: string | null }>;
+  /** Повторно изпращане на линка за потвърждение след регистрация. */
+  resendConfirmationEmail: (email: string) => Promise<{ error: string | null }>;
 }
 
 let subscribed = false;
@@ -49,15 +57,29 @@ export const useAuthStore = create<AuthStore>((set) => ({
   },
 
   signUp: async (email, password) => {
-    if (!supabase) return { error: 'Supabase не е конфигуриран.' };
-    const { error } = await supabase.auth.signUp({ email, password });
-    return { error: error?.message ?? null };
+    if (!supabase) return { error: 'Supabase не е конфигуриран.', awaitingConfirmation: false };
+    // Линкът за потвърждение да върне в приложението (imotnik://#access_token=...),
+    // а не към Site URL. Трябва да е добавен в Supabase → Redirect URLs.
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: Linking.createURL('') },
+    });
+    if (error) return { error: error.message, awaitingConfirmation: false };
+    // При включен „Confirm email" Supabase връща user без session — чака потвърждение.
+    // (Същото връща и за вече регистриран имейл — нарочно, срещу изброяване на акаунти.)
+    return { error: null, awaitingConfirmation: Boolean(data.user && !data.session) };
   },
 
   signIn: async (email, password) => {
-    if (!supabase) return { error: 'Supabase не е конфигуриран.' };
+    if (!supabase) return { error: 'Supabase не е конфигуриран.', emailNotConfirmed: false };
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error?.message ?? null };
+    return {
+      error: error?.message ?? null,
+      emailNotConfirmed:
+        (error && 'code' in error && error.code === 'email_not_confirmed') ||
+        /email not confirmed/i.test(error?.message ?? ''),
+    };
   },
 
   requestPasswordReset: async (email) => {
@@ -69,6 +91,16 @@ export const useAuthStore = create<AuthStore>((set) => ({
     // Configuration → Redirect URLs.
     const redirectTo = Linking.createURL('reset-password');
     const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+    return { error: error?.message ?? null };
+  },
+
+  resendConfirmationEmail: async (email) => {
+    if (!supabase) return { error: 'Supabase не е конфигуриран.' };
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: { emailRedirectTo: Linking.createURL('') },
+    });
     return { error: error?.message ?? null };
   },
 

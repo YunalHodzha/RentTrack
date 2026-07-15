@@ -15,6 +15,9 @@ import { useSettingsStore } from '@/store/settings';
 import { useAuthStore } from '@/store/auth';
 import { setupSyncTriggers } from '@/services/sync-runtime';
 import { initSentry, reportError } from '@/services/sentry';
+import { supabase } from '@/services/supabase';
+import { classifyAuthLink } from '@/lib/auth-link';
+import { toast } from '@/store/toast';
 import { Loading, ToastHost, ConfirmHost, ErrorState } from '@/components/ui';
 import { AuthScreen } from '@/components/auth-screen';
 import { ResetPasswordScreen } from '@/components/reset-password-screen';
@@ -73,15 +76,37 @@ function RootLayout() {
 
   const ready = dbReady && !authInitializing;
 
-  // Password recovery deep link (imotnik://reset-password#... / exp://.../--/reset-password#...).
-  // Прихваща се тук, а не като route: без сесия Stack-ът изобщо не е монтиран,
-  // а екранът трябва да е достъпен без вход. Флагът държи екрана видим, докато
-  // потребителят запази паролата — setSession от линка създава сесия по средата
-  // на потока и иначе gate-ът би превключил към приложението преждевременно.
+  // Auth deep link-ове (Supabase, токените са в URL фрагмента — виж lib/auth-link.ts).
+  // Прихващат се тук, а не като route: без сесия Stack-ът изобщо не е монтиран,
+  // а обработката трябва да е достъпна без вход. Два потока:
+  //  • recovery (imotnik://reset-password#...): флагът държи ResetPasswordScreen
+  //    видим, докато потребителят запази паролата — setSession от линка създава
+  //    сесия по средата на потока и иначе gate-ът би превключил преждевременно.
+  //  • email confirmation (imotnik://#access_token=...&type=signup): сесията се
+  //    установява директно от токените и auth слушателят пуска в приложението.
   const incomingUrl = Linking.useURL();
   const [recoveryUrl, setRecoveryUrl] = useState<string | null>(null);
   useEffect(() => {
-    if (incomingUrl && incomingUrl.includes('reset-password')) setRecoveryUrl(incomingUrl);
+    if (!incomingUrl) return;
+    const link = classifyAuthLink(incomingUrl);
+    if (link.kind === 'recovery') {
+      setRecoveryUrl(incomingUrl);
+    } else if (link.kind === 'tokens') {
+      if (!supabase) return;
+      void supabase.auth
+        .setSession({ access_token: link.accessToken, refresh_token: link.refreshToken })
+        .then(({ error }) => {
+          if (error) toast.error('Линкът за потвърждение е невалиден или изтекъл. Изпратете нов от екрана за вход.');
+          else toast.success('Имейлът е потвърден успешно');
+        });
+    } else if (link.kind === 'error') {
+      // Напр. #error=access_denied&error_code=otp_expired при изтекъл линк.
+      toast.error(
+        link.errorCode === 'otp_expired'
+          ? 'Линкът е изтекъл. Изпратете нов от екрана за вход.'
+          : 'Линкът е невалиден или изтекъл. Опитайте отново.',
+      );
+    }
   }, [incomingUrl]);
 
   // Start sync once signed in; tear it down on sign-out. Keyed by user id so a
