@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Field, PasswordInput, Button, SheetModal } from '@/components/ui';
+import { Text } from 'react-native';
+import { Field, PasswordInput, Button, SheetModal, useTheme, spacing } from '@/components/ui';
 import { toast } from '@/store/toast';
 import { supabase } from '@/services/supabase';
+import { reportError } from '@/services/sentry';
 
 /**
  * Смяна на паролата за вече вписан потребител (от Настройки). Иска текущата
@@ -10,10 +12,13 @@ import { supabase } from '@/services/supabase';
  * който сменя паролата през recovery линк без стара парола.
  */
 export function ChangePasswordSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const t = useTheme();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [errors, setErrors] = useState<{ current?: string; password?: string; confirm?: string }>({});
+  // `general` е мястото за несортирани сървърни/мрежови грешки — toast не върши
+  // работа тук, защото ToastHost е под отворения RN Modal (вж. бележката в ui.tsx).
+  const [errors, setErrors] = useState<{ current?: string; password?: string; confirm?: string; general?: string }>({});
   const [submitting, setSubmitting] = useState(false);
 
   // Нулираме полетата при всяко затваряне, за да не остане модалът „зареден".
@@ -28,6 +33,7 @@ export function ChangePasswordSheet({ visible, onClose }: { visible: boolean; on
 
   async function handleSave() {
     const next: typeof errors = {};
+    if (!currentPassword) next.current = 'Въведете текущата си парола';
     if (newPassword.length < 6) next.password = 'Паролата трябва да е поне 6 символа';
     if (confirmPassword !== newPassword) next.confirm = 'Паролите не съвпадат';
     if (newPassword && newPassword === currentPassword) next.password = 'Новата парола трябва да е различна от текущата';
@@ -41,12 +47,14 @@ export function ChangePasswordSheet({ visible, onClose }: { visible: boolean; on
         current_password: currentPassword,
       });
       if (error) {
-        if (/invalid.*(login|password|credential)|incorrect password|current password/i.test(error.message)) {
+        // GoTrue връща „Current password required…" и при попълнена, но невярна
+        // текуща парола (емпирично) — празното поле се хваща клиентски по-горе.
+        if (/current password required|incorrect|invalid.*password/i.test(error.message)) {
           setErrors({ current: 'Текущата парола е грешна' });
         } else if (/different from the old password/i.test(error.message)) {
           setErrors({ password: 'Новата парола трябва да е различна от старата' });
         } else {
-          toast.error('Неуспешна смяна на паролата. Опитайте отново.');
+          setErrors({ general: 'Неуспешна смяна на паролата. Опитайте отново.' });
         }
         return;
       }
@@ -55,6 +63,11 @@ export function ChangePasswordSheet({ visible, onClose }: { visible: boolean; on
       setNewPassword('');
       setConfirmPassword('');
       onClose();
+    } catch (e) {
+      // Изключение (мрежова грешка и т.н.) — иначе се губи като unhandled
+      // rejection без никакъв UI.
+      reportError(e);
+      setErrors({ general: 'Неочаквана грешка. Опитайте отново.' });
     } finally {
       setSubmitting(false);
     }
@@ -92,6 +105,11 @@ export function ChangePasswordSheet({ visible, onClose }: { visible: boolean; on
           error={!!errors.confirm}
         />
       </Field>
+      {errors.general ? (
+        <Text accessibilityRole="alert" style={{ fontSize: 13, fontWeight: '600', color: t.danger, marginBottom: spacing.md }}>
+          {errors.general}
+        </Text>
+      ) : null}
       <Button
         label={submitting ? 'Моля, изчакайте…' : 'Запази'}
         onPress={handleSave}
